@@ -45,7 +45,7 @@ class JavaScriptModule:
 
     def parse(self):
         script = create_string_buffer(self.code.encode("UTF-16"))
-        # TODO: Properly handle module code parse exceptions
+        # TODO: Properly handle syntax errors of the module code
         set_exception(self, parse_module_source(self,
                                                 self.cookie,
                                                 script,
