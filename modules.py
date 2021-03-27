@@ -87,12 +87,13 @@ def default_loader(_, url: URL):
         raise TypeError(f"Path scheme \"{scheme}\" is not supported")
 
 
-def default_import_meta_callback(module: JavaScriptModule, object: JSValueRef):
-    set_property(object, "url", str_to_js_string(module.directory))
+def default_import_meta_callback(module: Union[JavaScriptModule, None], object: JSValueRef):
+    if module is not None and object.value != 0 and object.value is not None:
+        set_property(object, "url", module.spec)
 
 
 class ModuleFIFOQueue(FIFOQueue):
-    def run(self, module: JavaScriptModule):
+    def run(_, module: JavaScriptModule):
         module.parse()
 
 
@@ -115,8 +116,9 @@ class ModuleRuntime:
     def get_module_by_pointer(self, pointer: c_void_p) -> Union[JavaScriptModule, None]:
         if pointer is None:
             return None
+        module: JavaScriptModule
         for module in self.modules:
-            if module._as_parameter_ == pointer:
+            if module._as_parameter_.value == pointer.value:
                 return
 
     def on_module_fetch(self, importer: Union[c_void_p, None], specifier: JSValueRef, module_record_p: POINTER(c_void_p), /):
@@ -148,26 +150,25 @@ class ModuleRuntime:
         
 
     def attach_callcacks(self):
-        @WINFUNCTYPE(c_void_p, JSValueRef, POINTER(c_void_p), c_void_p)
+        @WINFUNCTYPE(c_void_p, JSRef, JSValueRef, POINTER(c_void_p))
         def dummy1(ref_module, specifier, module_record):
             self.on_module_fetch(ref_module, specifier, module_record)
             return 0
 
-        @WINFUNCTYPE(c_void_p, JSValueRef, POINTER(c_void_p), c_void_p)
-        def dummy2(ref_source_ctx, specifier, module_record):
+        @WINFUNCTYPE(c_void_p, c_void_p, JSValueRef, POINTER(c_void_p))
+        def dummy2(_, specifier, module_record):  # just ignore the source context variable
             self.on_module_fetch(None, specifier, module_record)
             return 0
 
-        @WINFUNCTYPE(c_void_p, JSRef, JSValueRef)
+
         def dummy3(ref_module, ex):
             module = self.get_module_by_pointer(ref_module)
             module is not None and self.on_module_ready(module, ex)
-            return 0
 
-        @WINFUNCTYPE()
         def dummy4(ref_module, ex):
             pass
         set_fetch_importing_module_callback(dummy1)
         set_fetch_importing_module_from_script_callback(dummy2)
         set_import_meta_callback(default_import_meta_callback)
-        set_module_ready_callback()
+        set_module_ready_callback(dummy4)
+        set_module_notify_callback(dummy3)

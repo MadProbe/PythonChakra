@@ -433,7 +433,7 @@ def set_module_ready_callback(callback, module=0, /):
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
-    c = chakra_core.JsSetModuleHostInfo(module, 3, casted)
+    c = chakra_core.JsSetModuleHostInfo(module, 8, casted)
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
 
 
@@ -443,7 +443,7 @@ def set_module_notify_callback(callback, module=0, /):
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
-    c = chakra_core.JsSetModuleHostInfo(module, 8, casted)
+    c = chakra_core.JsSetModuleHostInfo(module, 3, casted)
     assert c == 0, descriptive_message(c, "set_module_notify_callback")
 
 
