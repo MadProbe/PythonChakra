@@ -19,6 +19,7 @@ class FIFOQueue:
             self.exec()
 
     def append(self, task):
+        print(repr(self.__class__), "append", task)
         if self.executing:
             self._remaining.append(task)
         elif not self.executed:
