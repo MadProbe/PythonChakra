@@ -3,7 +3,7 @@ from ctypes import *
 from enum import IntEnum
 from functools import wraps
 from traceback import format_exception
-from typing import Iterable, List, Union
+from typing import Iterable, List, Literal, Union
 
 from init import chakra_core
 
@@ -53,15 +53,18 @@ js_promise_states = {
     "resolved": 1,
     "rejected": 2
 }
+__callback_refs = []
 
 
-def descriptive_message(code: str, method: str):
+def descriptive_message(code: str, method: str) -> str:
     return f"While evaluation of {method} method, ChakraCore returned errornous {hex(code)} code!"
 
 
 
 def c_array_to_iterator(array, length, offset=0):
+    print("safsfkfkfKLSMFVKFGNSFGSFNGSFNGJSDFGSFD;")
     for index in range(offset, length):
+        print("c_array_to_iterator", array[index])
         yield array[index]
 
 
@@ -85,8 +88,7 @@ def js_value_to_string(value: JSValueRef) -> str:
                              string_length.value + 1, 0)
 
     # Set `null-ending` to the end
-    result_string_last_byte = (
-        c_char * string_length.value).from_address(addressof(result_string))
+    result_string_last_byte = (c_char * string_length.value).from_address(addressof(result_string))
     result_string_last_byte = '\0'  # noqa: F841
     return str(result_string.value, "utf8")
 
@@ -125,7 +127,7 @@ def javascript_method(constructor=False, fname=None):
     def wrapper(function):
         name = fname if fname is not None else function.__name__
 
-        @WINFUNCTYPE(c_void_p, JSValueRef, c_bool, POINTER(POINTER(JSValueRef)), c_ushort, c_void_p)
+        @CFUNCTYPE(c_void_p, JSValueRef, c_bool, POINTER(POINTER(JSValueRef)), c_ushort, c_void_p)
         @wraps(function)
         def dummy(callee, new_call, arguments, arguments_count, __user_data__):
             if new_call and not constructor:
@@ -136,8 +138,8 @@ def javascript_method(constructor=False, fname=None):
                         this = None
                     else:
                         this = arguments[0]
-                    return function(this,
-                                    *c_array_to_iterator(arguments, arguments_count, 1),
+                    return function(*c_array_to_iterator(arguments, arguments_count, 1),
+                                    this=this,
                                     callee=callee,
                                     new_call=bool(new_call))
                 except Exception as ex:
@@ -228,7 +230,7 @@ def get_property_id_from_str(string: str, /):
     return prop_id
 
 
-def set_property(obj: JSValueRef, key: Union[str, int], value: JSValueRef, /, *, strict_mode=c_true) -> JSValueRef:
+def set_property(obj: JSValueRef, key: Union[str, int], value: JSValueRef, /, *, strict_mode: Union[bool, Literal[1], Literal[0]] = c_true) -> JSValueRef:
     if type(key) is str:
         prop_id = get_property_id_from_str(key)
         c = chakra_core.JsSetProperty(obj, prop_id, value, strict_mode)
@@ -245,14 +247,30 @@ def set_prototype(obj: JSValueRef, proto: JSValueRef) -> JSValueRef:
     return obj
 
 
-def create_function(callback: c_func_type, name: Union[str, None] = None, /):
+def create_function(callback: c_func_type,
+                    name: Union[str, None] = None, /, *,
+                    attach_to_global_as: Union[str, bool, None] = None,
+                    attach_to_as: Union[str, None] = None,
+                    attach_to: Union[JSValueRef, None] = None) -> JSValueRef:
     function = JSValueRef()
     p = byref(function)
     if name is None:
         c = chakra_core.JsCreateFunction(callback, 0, p)
     else:
-        name = str_to_js_string(name)
-        c = chakra_core.JsCreateNamedFunction(name, callback, 0, p)
+        name_ = str_to_js_string(name)
+        c = chakra_core.JsCreateNamedFunction(name_, callback, 0, p)
+    if attach_to_global_as:
+        if attach_to_global_as is True:
+            if name is None:
+                raise TypeError
+            attach_to_global_as = name
+        set_property(js_globalThis, attach_to_global_as, function)
+    if attach_to:
+        if not attach_to_as:
+            if name is None:
+                raise TypeError
+            attach_to_as = name
+        set_property(attach_to, attach_to_as, function)
     assert c == 0, descriptive_message(c, "create_function")
     return function
 
@@ -380,13 +398,15 @@ def init_module_record(imp, url):
 
 
 def set_promise_callback(callback, /):
+    __callback_refs.append(callback)
     c = chakra_core.JsSetPromiseContinuationCallback(cast(callback, c_void_p),
                                                      0)
     assert c == 0, descriptive_message(c, "set_promise_callback")
 
 
 def set_rejections_callback(callback, /):
-    c = chakra_core.JsSetHostPromiseRejectionTracker(callback, 0)
+    __callback_refs.append(callback)
+    c = chakra_core.JsSetHostPromiseRejectionTracker(cast(callback, c_void_p), 0)
     assert c == 0, descriptive_message(c, "set_rejections_callback")
 
 
@@ -404,6 +424,7 @@ def set_exception(record, ex, /):
 def set_fetch_importing_module_callback(callback, /, module=0):
     _n = "set_fetch_importing_module_callback"
     callback = cast(callback, c_void_p)
+    __callback_refs.append(callback)
     c = chakra_core.JsSetModuleHostInfo(module, 4, callback)
     assert c == 0, descriptive_message(c, _n)
 
@@ -411,38 +432,46 @@ def set_fetch_importing_module_callback(callback, /, module=0):
 def set_fetch_importing_module_from_script_callback(callback, module=0, /):
     _n = "set_fetch_importing_module_from_script_callback"
     callback = cast(callback, c_void_p)
+    __callback_refs.append(callback)
     c = chakra_core.JsSetModuleHostInfo(module, 5, callback)
     assert c == 0, descriptive_message(c, _n)
 
 
 def set_url(record, url, /):
     url = cast(url, c_void_p)
+    __callback_refs.append(url)  # not callback, but why not to keep the reference?
     c = chakra_core.JsSetModuleHostInfo(record, 6, url)
     assert c == 0, descriptive_message(c, "set_url")
 
 
 def set_import_meta_callback(callback, module=0, /):
     callback = cast(callback, c_void_p)
+    __callback_refs.append(callback)
     c = chakra_core.JsSetModuleHostInfo(module, 7, callback)
     assert c == 0, descriptive_message(c, "set_import_meta_callback")
 
 
 def set_module_ready_callback(callback, module=0, /):
-    @WINFUNCTYPE(c_void_p, c_void_p, c_void_p)
+    @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy1(module, ex):
+        print("calling dummyy")
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
+    print(hex(casted.value))
+    __callback_refs.append(casted)
     c = chakra_core.JsSetModuleHostInfo(module, 8, casted)
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
 
 
 def set_module_notify_callback(callback, module=0, /):
-    @WINFUNCTYPE(c_void_p, c_void_p, c_void_p)
+    @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy1(module, ex):
+        print("calling dummy6")
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
+    __callback_refs.append(casted)
     c = chakra_core.JsSetModuleHostInfo(module, 3, casted)
     assert c == 0, descriptive_message(c, "set_module_notify_callback")
 
@@ -453,12 +482,16 @@ def parse_module_source(record: c_void_p,
                         script_len: int,
                         flags: int):
     ex = c_void_p()
+    print(len(script))
+    print(script_len)
     c = chakra_core.JsParseModuleSource(record,
                                         context_count,
                                         script,
-                                        script_len,
+                                        len(script) - 2,
                                         flags,
                                         byref(ex))
+    # print(js_value_to_string(ex))
+    # print(js_value_to_string(get_property(ex, 'stack')))
     assert c == 0, descriptive_message(c, "parse_module_source")
     return ex
 
@@ -520,6 +553,19 @@ def run_module(module: c_void_p) -> JSValueRef:
     assert c == 0, descriptive_message(c, "run_module")
     return result
 
+def run_script(script, filename):
+    result = JSValueRef()
+    c = chakra_core.JsRun(script, 0, filename,
+                          0x22, byref(result))
+    assert c == 0, descriptive_message(c, "run_script")
+    return result
+
+def create_c_string(py_string: str):
+    result = c_void_p()
+    c = chakra_core.JsCreateString(py_string, len(py_string), byref(result))
+    assert c == 0, descriptive_message(c, "create_c_string")
+    return result
+
 def c_array_to_iterator(array, length, /, offset=0):
     for index in range(offset, length):
         yield array[index]
@@ -553,7 +599,6 @@ def js_value_to_string(value: JSValueRef, /) -> str:
                              string_length.value + 1, 0)
 
     # Set `null-ending` to the end
-    result_string_last_byte = (
-        c_char * string_length.value).from_address(addressof(result_string))
+    result_string_last_byte = (c_char * string_length.value).from_address(addressof(result_string))
     result_string_last_byte = '\0'  # noqa: F841
     return str(result_string.value, "utf8")

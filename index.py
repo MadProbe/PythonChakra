@@ -38,12 +38,16 @@ class Boolean(ValueSkeleton):
 
 
 class Object(ValueSkeleton):
-    def __init__(self, /, *, value: JSValueRef = None) -> None:
+    def __init__(self, /, *, value: JSValueRef = None, attach_to_global_as: str = None) -> None:
         if value is None:
             value = create_object()
         self._as_parameter_ = value
         add_ref(self)
         _refs.append(self)
+        if attach_to_global_as is not None:
+            if type(attach_to_global_as) is not str:
+                raise TypeError()
+            set_property(js_globalThis, attach_to_global_as, self)
 
     def set_property(self, name: Union[str, int], value: JSValueRef, /) -> Object:
         set_property(self, name, value)
@@ -72,34 +76,37 @@ class String(ValueSkeleton):
         pass
 
 
-class Function(ValueSkeleton):
+class Function(Object):
     def __init__(self) -> None:
         pass
-
-    def is_object(self):
-        return True
 
     def is_function(self):
         return True
 
+    class Wrap:
+        __slots__ = "__function"
 
-class Promise(ValueSkeleton):
+        def __init__(self, function) -> None:
+            self.__function = function
+
+        def __call__(self, *args: Any, **kwds: Any) -> Any:
+            pass
+
+
+class Promise(Object):
     def __init__(self) -> None:
         pass
-
-    def is_object(self):
-        return True
 
     def is_promise(self):
         return True
 
-
-class Array(ValueSkeleton):
-    def __init__(self) -> None:
+    def __await__(self):
         pass
 
-    def is_object(self):
-        return True
+
+class Array(Object):
+    def __init__(self) -> None:
+        pass
 
     def is_array(self):
         return True
@@ -164,20 +171,37 @@ class JSRuntime:
         self.__flags = flags
         self.__runtime = c_void_p()
         self.__context = c_void_p()
-        self.__module_runtime = ModuleRuntime(self)
         self.__promise_queue = PromiseFIFOQueue()
+        self.__module_runtime = ModuleRuntime(self, self.__promise_queue)
         self._as_parameter_ = None
 
     def exec_module(self, specifier: str):
-        spec = self.__module_runtime.path_resolver(default_path_resolver, "file://" + getcwd() + "/", specifier)
+        spec = self.__module_runtime.path_resolver(default_path_resolver, self.__get_base(), specifier)
         code = self.__module_runtime.loader(default_loader, spec)
-        module = JavaScriptModule(spec, code, None, True)
+        module = JavaScriptModule(self.__promise_queue, spec, code, None, True)
         self.__module_runtime.add_module(str(spec), module)
         module.parse()  # Here the main module is parsed
+        print("Post-parse", "Pre-exec")
         self.__module_runtime.queue.exec()  # Parse all dependent modules
+        print("Post-exec")
         # Module is evaluated by callback
-        self.__promise_queue.exec()  # Execute promises
+        # self.__promise_queue.exec()  # Execute promises
+        # print("Pre-exec-2", self.__module_runtime.queue._tasks)
+        # self.__module_runtime.queue.exec()  # Parse all dependent modules
         # Root module is executed
+
+    def __get_base(self):
+        return "file://" + getcwd() + "/"
+
+    def exec_script(self, specifier: str, async_: bool = True):
+        fileurl = default_path_resolver(None, self.__get_base(), specifier)
+        script = default_loader(None, fileurl)
+        if async_:
+            script = f"(async()=>{{{script}}})()"
+        script = create_string_buffer(script.encode("UTF-16"))
+        buffer = create_external_array_buffer(script)
+        run_script(buffer, create_c_string(str(fileurl)))
+        self.__promise_queue.exec()
 
     def get_true(_):
         return Boolean(js_true)
@@ -189,10 +213,10 @@ class JSRuntime:
         return Null()
 
     def get_undefined(_):
-        return Undefined
+        return Undefined()
 
     def __queue_promise(self, task):
-        print("__queue_promise")
+        # print("__queue_promise")
         add_ref(c_void_p(task))
         self.__promise_queue.append(task)
 
@@ -217,18 +241,20 @@ class JSRuntime:
         init_utilitites()
         init_other_utilities()
 
-        @WINFUNCTYPE(c_void_p, JSValueRef, c_void_p)
+        @CFUNCTYPE(c_void_p, JSValueRef, c_void_p)
         def promise_continuation_callback(task, user_data):
             self.__queue_promise(task)
 
-        @WINFUNCTYPE(c_void_p, JSValueRef, JSValueRef, c_bool, c_void_p)
+        @CFUNCTYPE(c_void_p, JSValueRef, JSValueRef, c_bool, c_void_p)
         def promise_rejections_callback(promise, reason, handled, _):
-            print("promise_rejections_callback", handled, type(reason), type())
+            print("promise_rejections_callback", handled, type(reason), type(promise))
             if not handled:
                 print("Unhandled promise rejection:",
                       js_value_to_string(c_void_p(reason)))
         set_promise_callback(promise_continuation_callback)
         set_rejections_callback(promise_rejections_callback)
+        self.__module_runtime.attach_callcacks()
+
         return self, Object(value=js_globalThis)
 
     def __exit__(self, *_):
@@ -238,17 +264,19 @@ class JSRuntime:
                 module.dispose()
             self.__module_runtime.modules.clear()
         except:  # noqa: E722
-            pass
+            print("Failed to dispose modules")
         try:
             for ref in _refs:
                 js_release(ref)
         except:  # noqa: E722
-            pass
+            print("Failed to dispose ref")
         try:
             set_current_context(0)
             dispose_runtime(self)
         except:  # noqa: E722
-            pass
+            print("Failed to dispose runtime")
+        else:
+            print("P")
         self.__runtime = None
         self.__context = None
         self._as_parameter_ = None
