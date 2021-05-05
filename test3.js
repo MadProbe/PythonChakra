@@ -1,1 +1,3 @@
-export{}
+console.log("ASDFGHJKL;'\\\n")
+
+export {}

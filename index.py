@@ -183,8 +183,11 @@ class JSRuntime:
         module.parse()  # Here the main module is parsed
         print("Post-parse", "Pre-exec")
         self.__module_runtime.queue.exec()  # Parse all dependent modules
+        print("Post-exec")
         # Module is evaluated by callback
-        # self.__promise_queue.exec()  # Execute promises
+        self.__promise_queue.exec()  # Execute promises
+        # print("Pre-exec-2", self.__module_runtime.queue._tasks)
+        # self.__module_runtime.queue.exec()  # Parse all dependent modules
         # Root module is executed
 
     def __get_base(self):
@@ -213,7 +216,7 @@ class JSRuntime:
         return Undefined()
 
     def __queue_promise(self, task):
-        print("__queue_promise")
+        # print("__queue_promise")
         add_ref(c_void_p(task))
         self.__promise_queue.append(task)
 

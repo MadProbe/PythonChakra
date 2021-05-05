@@ -39,7 +39,7 @@ class JavaScriptModule:
         self.spec = str_to_js_string(str(specifier))
         add_ref(self.spec)
         module = init_module_record(importer, self.spec)
-        print(module)
+        # print(module)
         add_ref(module)
         self.module = module
         self._as_parameter_ = module
@@ -57,6 +57,7 @@ class JavaScriptModule:
         print(self.root, "parse_module_source")
 
     def eval(self):
+        print(f"Module {self.fullpath} is getting run!")
         run_module(self.module)
         # self.__promise_queue.exec()
 
@@ -137,7 +138,7 @@ class ModuleRuntime:
                     return module
 
     def on_module_fetch(self, importer: Union[c_void_p, None], specifier: JSValueRef, module_record_p: POINTER(c_void_p), /):
-        print(type(module_record_p))
+        # print(type(module_record_p))
         spec = js_value_to_string(specifier)
         parent_module = self.get_module_by_pointer(importer)
         pathbase = parse_url("file:///" + getcwd())
@@ -149,19 +150,21 @@ class ModuleRuntime:
         if type(spec) is not URL:
             raise TypeError
         module = self.get_module(spec)
-        if module is not None:
-            module_record_p[0] = module.module.value
-            return
-        code = str(self.loader(default_loader, spec))
-        module = JavaScriptModule(self.__promise_queue, spec, code, parent_module, importer is None)
-        self.queue.append(module)
+        if module is None:
+            code = str(self.loader(default_loader, spec))
+            print(spec, "importer is None:", importer is None)
+            module = JavaScriptModule(self.__promise_queue, spec, code, parent_module, importer is None)
+            self.add_module(str(spec), module)
+            self.queue.append(module)
         module_record_p[0] = module.module.value
 
     def on_module_ready(self, module: Union[JavaScriptModule, None], exception: Union[JSValueRef, None], /):
-        if module.root and exception is None:
-            module.eval()
-        elif module is not None and exception is not None:
-            print(js_value_to_string(c_void_p(exception)))
+        # print(module.root)
+        if module is not None:
+            if exception is None:
+                module.eval()
+            elif exception:
+                print(js_value_to_string(c_void_p(exception)))
         
 
     def attach_callcacks(self):
@@ -177,12 +180,13 @@ class ModuleRuntime:
 
 
         def dummy3(ref_module, ex):
-            print("dummy3")
+            # print("dummy3")
             module = self.get_module_by_pointer(ref_module)
             module is not None and self.on_module_ready(module, ex)
             return 0
 
         def dummy4(ref_module, ex):
+            # self.__promise_queue.exec()
             pass
 
         @CFUNCTYPE(c_int, c_void_p, c_void_p)
