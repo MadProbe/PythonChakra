@@ -27,8 +27,8 @@ class FIFOQueue:
         # print(repr(self.__class__), "append", task)
         if self.executing:
             self._remaining.append(task)
-        elif self.executed:
-            self.run(task)
+        # elif self.executed:
+        #     self.run(task)
         else:
             self._tasks.append(task)
 

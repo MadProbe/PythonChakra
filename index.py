@@ -185,7 +185,7 @@ class JSRuntime:
         self.__module_runtime.queue.exec()  # Parse all dependent modules
         print("Post-exec")
         # Module is evaluated by callback
-        self.__promise_queue.exec()  # Execute promises
+        # self.__promise_queue.exec()  # Execute promises
         # print("Pre-exec-2", self.__module_runtime.queue._tasks)
         # self.__module_runtime.queue.exec()  # Parse all dependent modules
         # Root module is executed

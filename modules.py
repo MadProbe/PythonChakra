@@ -59,7 +59,7 @@ class JavaScriptModule:
     def eval(self):
         print(f"Module {self.fullpath} is getting run!")
         run_module(self.module)
-        # self.__promise_queue.exec()
+        self.__promise_queue.exec()
 
     def dispose(self):
         js_release(self.spec)
