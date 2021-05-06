@@ -1,0 +1,2 @@
+max-line-length = 89
+ignore = ['F403', 'F405'] # These errors are disabled because star imports cause these errors

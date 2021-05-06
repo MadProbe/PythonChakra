@@ -1,6 +1,6 @@
-from index import *
 import sys
-import simple_chalk
+from simple_chalk import chalk
+from index import *
 
 with JSRuntime() as (runtime, global_this):
     true = runtime.get_true()
@@ -14,18 +14,22 @@ with JSRuntime() as (runtime, global_this):
 
     @javascript_method()
     def warn(*args, **_):
-        print(simple_chalk.chalk.yellow("[WARN]"), *map(js_value_to_string, args))
+        args = map(js_value_to_string, args)
+        print(chalk.yellow("[WARN]"), *args)
 
     @javascript_method()
     def error(*args, **_):
-        print(simple_chalk.chalk.red("[ERROR]"), *map(js_value_to_string, args), file=sys.stderr)
-    
+        args = map(js_value_to_string, args)
+        print(chalk.red("[ERROR]"), *args, file=sys.stderr)
+
     @javascript_method()
     def write_(*args, **_):
         print(*map(js_value_to_string, args), end=None)
-    global_this["writeln"] = create_function(log, "log", attach_to_global_as="print", attach_to=console)
+    global_this["writeln"] = create_function(log, "log",
+                                             attach_to_global_as="print",
+                                             attach_to=console)
     create_function(warn, "warn", attach_to=console)
     create_function(error, "error", attach_to=console)
     create_function(write_, "write", attach_to_global_as=True)
-    
+
     runtime.exec_module("./test.js")

@@ -1,29 +1,18 @@
 from os import getcwd
-from typing import *
+from typing import Any, Union
 from dll_wrapper import *
-from value_skeleton import ValueSkeleton
-from modules import JavaScriptModule, ModuleRuntime, default_loader, default_path_resolver
+from modules import (JavaScriptModule, ModuleRuntime,
+                     default_loader, default_path_resolver)
 from promise_queue import PromiseFIFOQueue
+from value_skeleton import ValueSkeleton
 
 
 # Forwards
-class Boolean:
-    pass
-
-
 class Object:
     pass
 
 
 class BigInt:
-    pass
-
-
-class Null:
-    pass
-
-
-class Undefined:
     pass
 
 
@@ -38,7 +27,8 @@ class Boolean(ValueSkeleton):
 
 
 class Object(ValueSkeleton):
-    def __init__(self, /, *, value: JSValueRef = None, attach_to_global_as: str = None) -> None:
+    def __init__(self, /, *, value: JSValueRef = None,
+                 attach_to_global_as: str = None) -> None:
         if value is None:
             value = create_object()
         self._as_parameter_ = value
@@ -84,7 +74,7 @@ class Function(Object):
         return True
 
     class Wrap:
-        __slots__ = "__function"
+        __slots__ = "__function",
 
         def __init__(self, function) -> None:
             self.__function = function
@@ -110,6 +100,30 @@ class Array(Object):
 
     def is_array(self):
         return True
+
+
+class NotConstructableError(Exception):
+    """
+    Indicates that class is not constructable
+    """
+    pass
+
+
+class Reflect():
+    def __init__(self) -> None:
+        raise NotConstructableError
+
+    @staticmethod
+    def is_array(value: JSValueRef) -> bool:
+        return typeof(value) == js_types["array"]
+
+    @staticmethod
+    def is_boolean(value: JSValueRef) -> bool:
+        return typeof(value) == js_types["boolean"]
+
+    @staticmethod
+    def is_callable(value: JSValueRef) -> bool:
+        return is_callable(value)
 
 
 class BigInt(ValueSkeleton):
@@ -165,7 +179,8 @@ _refs = []
 
 
 class JSRuntime:
-    __slots__ = "_as_parameter_", "__flags", "__runtime", "__context", "__module_runtime", "__promise_queue"
+    __slots__ = "_as_parameter_", "__flags", "__runtime", \
+                "__context", "__module_runtime", "__promise_queue"
 
     def __init__(self, /, *, flags: int = 0x22):
         self.__flags = flags
@@ -176,19 +191,16 @@ class JSRuntime:
         self._as_parameter_ = None
 
     def exec_module(self, specifier: str):
-        spec = self.__module_runtime.path_resolver(default_path_resolver, self.__get_base(), specifier)
-        code = self.__module_runtime.loader(default_loader, spec)
-        module = JavaScriptModule(self.__promise_queue, spec, code, None, True)
-        self.__module_runtime.add_module(str(spec), module)
-        module.parse()  # Here the main module is parsed
-        # print("Post-parse", "Pre-exec")
-        self.__module_runtime.queue.exec()  # Parse all dependent modules
-        # print("Post-exec")
-        # Module is evaluated by callback
-        # self.__promise_queue.exec()  # Execute promises
-        # print("Pre-exec-2", self.__module_runtime.queue._tasks)
-        # self.__module_runtime.queue.exec()  # Parse all dependent modules
-        # Root module is executed
+        module_runtime = self.__module_runtime
+        spec = module_runtime.path_resolver(default_path_resolver,
+                                            self.__get_base(),
+                                            specifier)
+        code = module_runtime.loader(default_loader, spec)
+        module = JavaScriptModule(self.__promise_queue,
+                                  module_runtime.queue,
+                                  spec, code, None, True)
+        module_runtime.add_module(str(spec), module)
+        module.parse()
 
     def __get_base(self):
         return "file://" + getcwd() + "/"
@@ -225,7 +237,7 @@ class JSRuntime:
             return get_runtime_memory_limit(self)
         else:
             set_runtime_memory_limit(self, limit)
-    
+
     def memory_usage(self) -> int:
         return get_runtime_memory_usage(self)
 
@@ -247,7 +259,6 @@ class JSRuntime:
 
         @CFUNCTYPE(c_void_p, JSValueRef, JSValueRef, c_bool, c_void_p)
         def promise_rejections_callback(promise, reason, handled, _):
-            print("promise_rejections_callback", handled, type(reason), type(promise))
             if not handled:
                 print("Unhandled promise rejection:",
                       js_value_to_string(c_void_p(reason)))

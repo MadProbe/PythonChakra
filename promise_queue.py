@@ -18,6 +18,7 @@ class PromiseFIFOQueue(FIFOQueue):
                                        arguments, 1, byref(result))
             # print("Done promise continuation callback")
         except Exception as ex:
-            print("An error happed when executed promise continuation callback:", ex, sep="\n")
+            print("An error happed when executed promise continuation callback:",
+                  ex, sep="\n")
         finally:
             js_release(c_void_p(task))

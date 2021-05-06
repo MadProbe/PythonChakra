@@ -1,6 +1,4 @@
-from os import getcwd
-import os
-from promise_queue import PromiseFIFOQueue
+from os import getcwd, name
 from typing import *
 
 import requests
@@ -10,25 +8,34 @@ from whatwg_url import is_valid_url, parse_url
 from cookies import cookies
 from dll_wrapper import *
 from fifo_queue import FIFOQueue
+from promise_queue import PromiseFIFOQueue
+
+
+# Forwards
+class JavaScriptModule:
+    pass
+
+
+class ModuleFIFOQueue:
+    pass
 
 
 PathResolverFunctionType = Callable[[Callable[[None, str, str], URL], str, str], URL]
 LoaderFunctionType = Callable[[Callable[[None, str], URL], str], URL]
-
-
-class WTFException(Exception):
-    """
-    Exception is raised when highly unexcepted thing occurs
-    """
-    pass
+ModuleOrNone = Union[JavaScriptModule, None]
 
 
 class JavaScriptModule:
-    __slots__ = "_as_parameter_", "spec", "code", "cookie", "directory", "fullpath", "module", "parent", "root", "__promise_queue"
+    __slots__ = "_as_parameter_", "spec", "code", "cookie", "directory", \
+                "fullpath", "module", "parent", "root", "__promise_queue", \
+                "__module_queue"
 
-    def __init__(self, queue: PromiseFIFOQueue, specifier: URL, code: str, importer: c_void_p, root: bool = False, /) -> None:
+    def __init__(self, promise_queue: PromiseFIFOQueue,
+                 module_queue: ModuleFIFOQueue, specifier: URL,
+                 code: str, importer: c_void_p, root: bool = False, /) -> None:
         self.root = root
-        self.__promise_queue = queue
+        self.__promise_queue = promise_queue
+        self.__module_queue = module_queue
         self.cookie = cookies.increment()
         if importer is not None:
             self.parent = importer
@@ -47,14 +54,15 @@ class JavaScriptModule:
         set_url(module, self.spec)
 
     def parse(self):
-        script = create_string_buffer((self.code + "\0").encode('UTF-16'))
+        script = str_to_array(self.code + "\0", encoding="UTF-16")
         # TODO: Properly handle syntax errors of the module code
         parse_module_source(self,
                             self.cookie,
                             script,
                             len(script),
                             0)
-        # print(self.root, "parse_module_source")
+        if self.root:
+            self.__module_queue.exec()
 
     def eval(self):
         # print(f"Module {self.fullpath} is getting run!")
@@ -85,7 +93,7 @@ def default_loader(_, url: URL):
         href = url.href[5:]
         while href[0] == "/":
             href = href[1:]
-        if os.name == "posix":
+        if name == "posix":
             href = "/" + href
         with open(href, 'r') as file:
             return ''.join(file.readlines())
@@ -93,7 +101,8 @@ def default_loader(_, url: URL):
         raise TypeError(f"Path scheme \"{scheme}\" is not supported")
 
 
-def default_import_meta_callback(module: Union[JavaScriptModule, None], object: JSValueRef):
+def default_import_meta_callback(module: ModuleOrNone,
+                                 object: JSValueRef):
     if module is not None and object.value != 0 and object.value is not None:
         set_property(object, "url", module.spec)
 
@@ -104,7 +113,8 @@ class ModuleFIFOQueue(FIFOQueue):
 
 
 class ModuleRuntime:
-    __slots__ = "__promise_queue", "modules", "path_resolver", "loader", "runtime", "queue"
+    __slots__ = "__promise_queue", "modules", \
+                "path_resolver", "loader", "runtime", "queue"
 
     def __init__(self, runtime, __promise_queue: PromiseFIFOQueue,
                  path_resolver: PathResolverFunctionType = None,
@@ -119,32 +129,32 @@ class ModuleRuntime:
     def add_module(self, spec: str, module: JavaScriptModule) -> None:
         self.modules[spec] = module
 
-    def get_module(self, specifier: str, /) -> Union[JavaScriptModule, None]:
+    def get_module(self, specifier: str, /) -> ModuleOrNone:
         return self.modules.get(specifier)
 
-    def get_module_by_pointer(self, pointer: c_void_p) -> Union[JavaScriptModule, None]:
+    def get_module_by_pointer(self, pointer: c_void_p) -> ModuleOrNone:
         if pointer is None:
             return None
         module: JavaScriptModule
         if type(pointer) is int:
             for module in self.modules.values():
-                # print("asdjfsdf-iteree-1:", module._as_parameter_.value, pointer)
                 if module._as_parameter_.value == pointer:
                     return module
         else:
             for module in self.modules.values():
-                # print("asdjfsdf-iteree-2:", module._as_parameter_.value, pointer)
                 if module._as_parameter_.value == pointer.value:
                     return module
 
-    def on_module_fetch(self, importer: Union[c_void_p, None], specifier: JSValueRef, module_record_p: POINTER(c_void_p), /):
+    def on_module_fetch(self, importer: Union[c_void_p, None],
+                        specifier: JSValueRef,
+                        module_record_p: POINTER(c_void_p), /):
         # print(type(module_record_p))
         spec = js_value_to_string(specifier)
         parent_module = self.get_module_by_pointer(importer)
         pathbase = parse_url("file:///" + getcwd())
         if importer is not None:
             if parent_module is None:
-                raise WTFException("WTF???")
+                raise Exception(f"Couldn't resolve module {importer}")
             pathbase = parent_module.directory
         spec: URL = self.path_resolver(default_path_resolver, pathbase, spec)
         if type(spec) is not URL:
@@ -152,32 +162,33 @@ class ModuleRuntime:
         module = self.get_module(spec)
         if module is None:
             code = str(self.loader(default_loader, spec))
-            # print(spec, "importer is None:", importer is None)
-            module = JavaScriptModule(self.__promise_queue, spec, code, parent_module, importer is None)
+            module = JavaScriptModule(self.__promise_queue, self.queue, spec,
+                                      code, parent_module, importer is None)
             self.add_module(str(spec), module)
             self.queue.append(module)
         module_record_p[0] = module.module.value
 
-    def on_module_ready(self, module: Union[JavaScriptModule, None], exception: Union[JSValueRef, None], /):
-        # print(module.root)
+    def on_module_ready(self, module: ModuleOrNone,
+                        exception: Union[JSValueRef, None], /):
         if module is not None:
             if exception is None:
                 module.eval()
             elif exception:
                 print(js_value_to_string(c_void_p(exception)))
-        
 
     def attach_callcacks(self):
         @CFUNCTYPE(c_int, JSRef, JSValueRef, POINTER(c_void_p))
         def dummy1(ref_module, specifier, module_record):
-            self.on_module_fetch(c_void_p(ref_module), c_void_p(specifier), module_record)
+            self.on_module_fetch(c_void_p(ref_module),
+                                 c_void_p(specifier),
+                                 module_record)
             return 0
 
         @CFUNCTYPE(c_int, c_void_p, JSValueRef, POINTER(c_void_p))
-        def dummy2(_, specifier, module_record):  # just ignore the source context variable
+        def dummy2(_, specifier, module_record):
+            # just ignore the source context variable
             self.on_module_fetch(None, c_void_p(specifier), module_record)
             return 0
-
 
         def dummy3(ref_module, ex):
             # print("dummy3")

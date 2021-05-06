@@ -28,3 +28,9 @@ class ValueSkeleton:
 
     def is_promise(self):
         return False
+
+    def is_array_buffer(self):
+        return False
+
+    def is_typed_array(self):
+        return False
