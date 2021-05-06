@@ -7,4 +7,6 @@ class Cookie:
         self.last += 1
         return last
 
+
 cookies = Cookie()
+__all__ = "cookies",

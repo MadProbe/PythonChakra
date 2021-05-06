@@ -1,6 +1,6 @@
 import sys
 from simple_chalk import chalk
-from index import *
+from python_chakra import *
 
 with JSRuntime() as (runtime, global_this):
     true = runtime.get_true()
@@ -32,4 +32,4 @@ with JSRuntime() as (runtime, global_this):
     create_function(error, "error", attach_to=console)
     create_function(write_, "write", attach_to_global_as=True)
 
-    runtime.exec_module("./test.js")
+    runtime.exec_module("./examples/test.js")

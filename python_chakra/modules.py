@@ -5,10 +5,8 @@ import requests
 from whatwg_url import Url as URL
 from whatwg_url import is_valid_url, parse_url
 
-from cookies import cookies
-from dll_wrapper import *
-from fifo_queue import FIFOQueue
-from promise_queue import PromiseFIFOQueue
+from .utils import cookies, FIFOQueue
+from .dll_wrapper import *
 
 
 # Forwards

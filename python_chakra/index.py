@@ -1,10 +1,9 @@
 from os import getcwd
 from typing import Any, Union
-from dll_wrapper import *
-from modules import (JavaScriptModule, ModuleRuntime,
-                     default_loader, default_path_resolver)
-from promise_queue import PromiseFIFOQueue
-from value_skeleton import ValueSkeleton
+from .dll_wrapper import *
+from .modules import (JavaScriptModule, ModuleRuntime,
+                      default_loader, default_path_resolver)
+from .utils import ValueSkeleton
 
 
 # Forwards

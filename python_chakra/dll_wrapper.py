@@ -5,7 +5,7 @@ from functools import wraps
 from traceback import format_exception
 from typing import Iterable, List, Literal, Union
 
-from init import chakra_core
+from .utils import chakra_core, FIFOQueue
 
 
 class ErrorCodesEnum(IntEnum):
@@ -24,6 +24,25 @@ class ErrorCodesEnum(IntEnum):
     ErrorHeapEnumInProgress = 0x1000b
     ErrorArgumentNotObject = 0x1000c
     ErrorInProfileCallback = 0x1000d
+
+
+class PromiseFIFOQueue(FIFOQueue):
+    _ref = []
+
+    def run(self, task):
+        try:
+            result = JSValueRef()
+            arguments = pointer(js_undefined)
+            self._ref.append(arguments)
+            # print(typeof(c_void_p(task)))
+            chakra_core.JsCallFunction(c_void_p(task),
+                                       arguments, 1, byref(result))
+            # print("Done promise continuation callback")
+        except Exception as ex:
+            print("An error happed when executed promise continuation callback:",
+                  ex, sep="\n")
+        finally:
+            js_release(c_void_p(task))
 
 
 nullptr = POINTER(c_int)()
