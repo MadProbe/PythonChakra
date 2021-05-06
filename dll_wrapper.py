@@ -62,9 +62,9 @@ def descriptive_message(code: str, method: str) -> str:
 
 
 def c_array_to_iterator(array, length, offset=0):
-    print("safsfkfkfKLSMFVKFGNSFGSFNGSFNGJSDFGSFD;")
+    # print("safsfkfkfKLSMFVKFGNSFGSFNGSFNGJSDFGSFD;")
     for index in range(offset, length):
-        print("c_array_to_iterator", array[index])
+        # print("c_array_to_iterator", array[index])
         yield array[index]
 
 
@@ -454,11 +454,11 @@ def set_import_meta_callback(callback, module=0, /):
 def set_module_ready_callback(callback, module=0, /):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy1(module, ex):
-        print("calling dummyy")
+        # print("calling dummyy")
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
-    print(hex(casted.value))
+    # print(hex(casted.value))
     __callback_refs.append(casted)
     c = chakra_core.JsSetModuleHostInfo(module, 8, casted)
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
@@ -467,7 +467,7 @@ def set_module_ready_callback(callback, module=0, /):
 def set_module_notify_callback(callback, module=0, /):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy1(module, ex):
-        print("calling dummy6")
+        # print("calling dummy6")
         callback(module, ex)
         return 0
     casted = cast(dummy1, c_void_p)
@@ -482,8 +482,8 @@ def parse_module_source(record: c_void_p,
                         script_len: int,
                         flags: int):
     ex = c_void_p()
-    print(len(script))
-    print(script_len)
+    # print(len(script))
+    # print(script_len)
     c = chakra_core.JsParseModuleSource(record,
                                         context_count,
                                         script,

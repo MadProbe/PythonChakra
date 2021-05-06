@@ -181,9 +181,9 @@ class JSRuntime:
         module = JavaScriptModule(self.__promise_queue, spec, code, None, True)
         self.__module_runtime.add_module(str(spec), module)
         module.parse()  # Here the main module is parsed
-        print("Post-parse", "Pre-exec")
+        # print("Post-parse", "Pre-exec")
         self.__module_runtime.queue.exec()  # Parse all dependent modules
-        print("Post-exec")
+        # print("Post-exec")
         # Module is evaluated by callback
         # self.__promise_queue.exec()  # Execute promises
         # print("Pre-exec-2", self.__module_runtime.queue._tasks)
@@ -275,8 +275,8 @@ class JSRuntime:
             dispose_runtime(self)
         except:  # noqa: E722
             print("Failed to dispose runtime")
-        else:
-            print("P")
+        # else:
+            # print("P")
         self.__runtime = None
         self.__context = None
         self._as_parameter_ = None

@@ -54,10 +54,10 @@ class JavaScriptModule:
                             script,
                             len(script),
                             0)
-        print(self.root, "parse_module_source")
+        # print(self.root, "parse_module_source")
 
     def eval(self):
-        print(f"Module {self.fullpath} is getting run!")
+        # print(f"Module {self.fullpath} is getting run!")
         run_module(self.module)
         self.__promise_queue.exec()
 
@@ -128,12 +128,12 @@ class ModuleRuntime:
         module: JavaScriptModule
         if type(pointer) is int:
             for module in self.modules.values():
-                print("asdjfsdf-iteree-1:", module._as_parameter_.value, pointer)
+                # print("asdjfsdf-iteree-1:", module._as_parameter_.value, pointer)
                 if module._as_parameter_.value == pointer:
                     return module
         else:
             for module in self.modules.values():
-                print("asdjfsdf-iteree-2:", module._as_parameter_.value, pointer)
+                # print("asdjfsdf-iteree-2:", module._as_parameter_.value, pointer)
                 if module._as_parameter_.value == pointer.value:
                     return module
 
@@ -152,7 +152,7 @@ class ModuleRuntime:
         module = self.get_module(spec)
         if module is None:
             code = str(self.loader(default_loader, spec))
-            print(spec, "importer is None:", importer is None)
+            # print(spec, "importer is None:", importer is None)
             module = JavaScriptModule(self.__promise_queue, spec, code, parent_module, importer is None)
             self.add_module(str(spec), module)
             self.queue.append(module)
