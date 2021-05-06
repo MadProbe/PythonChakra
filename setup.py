@@ -1,5 +1,5 @@
 """
-Parts of this file were taken from the pyzmq project
+Parts of this file were taken from the discord.py project
 (https://github.com/Rapptz/discord.py) which have been permitted for use under the
 MIT license.
 """
