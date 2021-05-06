@@ -30,7 +30,7 @@ class JavaScriptModule:
 
     def __init__(self, promise_queue: PromiseFIFOQueue,
                  module_queue: ModuleFIFOQueue, specifier: URL,
-                 code: str, importer: c_void_p, root: bool = False, /) -> None:
+                 code: str, importer: c_void_p, root: bool = False) -> None:
         self.root = root
         self.__promise_queue = promise_queue
         self.__module_queue = module_queue
@@ -127,7 +127,7 @@ class ModuleRuntime:
     def add_module(self, spec: str, module: JavaScriptModule) -> None:
         self.modules[spec] = module
 
-    def get_module(self, specifier: str, /) -> ModuleOrNone:
+    def get_module(self, specifier: str) -> ModuleOrNone:
         return self.modules.get(specifier)
 
     def get_module_by_pointer(self, pointer: c_void_p) -> ModuleOrNone:
@@ -145,7 +145,7 @@ class ModuleRuntime:
 
     def on_module_fetch(self, importer: Union[c_void_p, None],
                         specifier: JSValueRef,
-                        module_record_p: POINTER(c_void_p), /):
+                        module_record_p: POINTER(c_void_p)):
         # print(type(module_record_p))
         spec = js_value_to_string(specifier)
         parent_module = self.get_module_by_pointer(importer)
@@ -167,7 +167,7 @@ class ModuleRuntime:
         module_record_p[0] = module.module.value
 
     def on_module_ready(self, module: ModuleOrNone,
-                        exception: Union[JSValueRef, None], /):
+                        exception: Union[JSValueRef, None]):
         if module is not None:
             if exception is None:
                 module.eval()

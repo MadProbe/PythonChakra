@@ -35,4 +35,4 @@ setup(name='python-chakra',
       description='Python wrapper for ChakraCore',
       include_package_data=True,
       install_requires=requirements,
-      python_requires='>=3.9.0')
+      python_requires='>=3.7.0')

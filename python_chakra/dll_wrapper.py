@@ -164,7 +164,7 @@ def js_class(name=None, extends=None):
     return wrapper
 
 
-def str_to_js_string(string: str, /) -> JSValueRef:
+def str_to_js_string(string: str) -> JSValueRef:
     """
     Converts python string to js string value ref
     """
@@ -175,19 +175,19 @@ def str_to_js_string(string: str, /) -> JSValueRef:
     return string_pointer
 
 
-def str_to_array(string: Union[str, int], /, *, encoding="utf8") -> Array[c_char]:
+def str_to_array(string: Union[str, int], *, encoding="utf8") -> Array[c_char]:
     string = str(string).encode(encoding)
     return create_string_buffer(string)
 
 
-def create_runtime(flags: int = 0x22, /):
+def create_runtime(flags: int = 0x22):
     runtime = c_void_p()
     c = chakra_core.JsCreateRuntime(flags, 0, byref(runtime))
     assert c == 0, descriptive_message(c, "create_runtime")
     return runtime
 
 
-def create_array(length=0, /):
+def create_array(length=0):
     a = JSValueRef()
     c = chakra_core.JsCreateArray(length, byref(a))
     assert c == 0, descriptive_message(c, "create_array")
@@ -212,7 +212,7 @@ def create_object(properties: dict = None) -> JSValueRef:
     return obj
 
 
-def get_property_id_from_str(string: str, /):
+def get_property_id_from_str(string: str):
     prop_id = c_void_p()
     c = chakra_core.JsCreatePropertyId(str_to_array(string),
                                        len(string), byref(prop_id))
@@ -222,7 +222,7 @@ def get_property_id_from_str(string: str, /):
 
 def set_property(obj: JSValueRef,
                  key: Union[str, int],
-                 value: JSValueRef, /, *,
+                 value: JSValueRef, *,
                  strict_mode: StrictModeType = c_true) -> JSValueRef:
     if type(key) is str:
         prop_id = get_property_id_from_str(key)
@@ -241,7 +241,7 @@ def set_prototype(obj: JSValueRef, proto: JSValueRef) -> JSValueRef:
 
 
 def create_function(callback: c_func_type,
-                    name: Union[str, None] = None, /, *,
+                    name: Union[str, None] = None, *,
                     attach_to_global_as: Union[str, bool, None] = None,
                     attach_to_as: Union[str, None] = None,
                     attach_to: Union[JSValueRef, None] = None) -> JSValueRef:
@@ -268,21 +268,21 @@ def create_function(callback: c_func_type,
     return function
 
 
-def create_error(message: str, /) -> JSValueRef:
+def create_error(message: str) -> JSValueRef:
     error = JSValueRef()
     c = chakra_core.JsCreateError(str_to_js_string(message), byref(error))
     assert c == 0, descriptive_message(c, "create_error")
     return error
 
 
-def create_type_error(message: str, /) -> JSValueRef:
+def create_type_error(message: str) -> JSValueRef:
     error = JSValueRef()
     c = chakra_core.JsCreateTypeError(str_to_js_string(message), byref(error))
     assert c == 0, descriptive_message(c, "create_type_error")
     return error
 
 
-def call(f: JSValueRef, /, *args, this_arg: JSValueRef = None):
+def call(f: JSValueRef, *args, this_arg: JSValueRef = None):
     _l = len(args) + 1
     a = (JSValueRef * _l)(this_arg or js_undefined, *args)
     result = JSValueRef()
@@ -291,7 +291,7 @@ def call(f: JSValueRef, /, *args, this_arg: JSValueRef = None):
     return result
 
 
-def construct(f: JSValueRef, /, *args, this_arg: JSValueRef = None):
+def construct(f: JSValueRef, *args, this_arg: JSValueRef = None):
     _l = len(args) + 1
     a = (JSValueRef * _l)(this_arg or js_undefined, *args)
     result = JSValueRef()
@@ -300,21 +300,21 @@ def construct(f: JSValueRef, /, *args, this_arg: JSValueRef = None):
     return result
 
 
-def get_own_property_names(value: JSValueRef, /) -> JSValueRef:
+def get_own_property_names(value: JSValueRef) -> JSValueRef:
     names = JSValueRef()
     c = chakra_core.JsGetOwnPropertyNames(value, byref(names))
     assert c == 0, descriptive_message(c, "get_own_property_names")
     return names
 
 
-def get_prototype(value: JSValueRef, /):
+def get_prototype(value: JSValueRef):
     proto = JSValueRef()
     c = chakra_core.JsGetPrototype(value, byref(proto))
     assert c == 0, descriptive_message(c, "get_prototype")
     return proto
 
 
-def get_property(object: JSValueRef, prop: Union[str, int], /) -> JSValueRef:
+def get_property(object: JSValueRef, prop: Union[str, int]) -> JSValueRef:
     r = JSValueRef()
     if type(prop) is int:
         c = chakra_core.JsGetIndexedProperty(object, to_number(prop),
@@ -326,14 +326,14 @@ def get_property(object: JSValueRef, prop: Union[str, int], /) -> JSValueRef:
     return r
 
 
-def array_to_iterable(array: JSValueRef, /) -> Iterable[JSValueRef]:
+def array_to_iterable(array: JSValueRef) -> Iterable[JSValueRef]:
     length = to_int(get_property(array, "length"))
     return (get_property(array, index) for index in range(0, length))
     # for index in range(0, length):
     #     yield get_property(array, index)
 
 
-def array_to_list(array: JSValueRef, /) -> List[JSValueRef]:
+def array_to_list(array: JSValueRef) -> List[JSValueRef]:
     return list(array_to_iterable(array))
 
 
@@ -344,7 +344,7 @@ def js_eval(code):
     return call(js_eval_function, str_to_js_string(code))
 
 
-def to_number(value: Union[JSValueRef, int], /) -> JSValueRef:
+def to_number(value: Union[JSValueRef, int]) -> JSValueRef:
     number = JSValueRef()
     if type(value) is int:
         c = chakra_core.JsIntToNumber(value, byref(number))
@@ -354,7 +354,7 @@ def to_number(value: Union[JSValueRef, int], /) -> JSValueRef:
     return number
 
 
-def to_int(value: JSValueRef, /) -> int:
+def to_int(value: JSValueRef) -> int:
     value = to_number(value)
     number = c_int(0)
     c = chakra_core.JsNumberToInt(value, byref(number))
@@ -362,23 +362,23 @@ def to_int(value: JSValueRef, /) -> int:
     return number.value
 
 
-def prepare_return_value(value: JSValueRef, /) -> int:
+def prepare_return_value(value: JSValueRef) -> int:
     return value.value
 
 
-def typeof(value: JSValueRef, /) -> int:
+def typeof(value: JSValueRef) -> int:
     T = c_int(0)
     c = chakra_core.JsGetValueType(value, byref(T))
     assert c == 0, descriptive_message(c, "typeof")
     return T.value
 
 
-def throw(error: JSValueRef, /) -> None:
+def throw(error: JSValueRef) -> None:
     c = chakra_core.JsSetException(error)
     assert c == 0, descriptive_message(c, "throw")
 
 
-def inspect(value: JSValueRef, indent="\t", /) -> str:
+def inspect(value: JSValueRef, indent="\t") -> str:
     props = array_to_iterable(get_own_property_names(value))
     for prop in props:
         pass
@@ -386,31 +386,31 @@ def inspect(value: JSValueRef, indent="\t", /) -> str:
     return js_value_to_string(value)
 
 
-def set_promise_callback(callback, /):
+def set_promise_callback(callback):
     __callback_refs.append(callback)
     c = chakra_core.JsSetPromiseContinuationCallback(cast(callback, c_void_p),
                                                      0)
     assert c == 0, descriptive_message(c, "set_promise_callback")
 
 
-def set_rejections_callback(callback, /):
+def set_rejections_callback(callback):
     __callback_refs.append(callback)
     c = chakra_core.JsSetHostPromiseRejectionTracker(cast(callback, c_void_p), 0)
     assert c == 0, descriptive_message(c, "set_rejections_callback")
 
 
-def set_current_context(context, /):
+def set_current_context(context):
     c = chakra_core.JsSetCurrentContext(context, 0)
     assert c == 0, descriptive_message(c, "set_current_context")
 
 
-def set_exception(record, ex, /):
+def set_exception(record, ex):
     print(ex)
     c = chakra_core.JsSetModuleHostInfo(record, 1, ex)
     assert c == 0, descriptive_message(c, "set_exception")
 
 
-def set_fetch_importing_module_callback(callback, /, module=0):
+def set_fetch_importing_module_callback(callback, module=0):
     _n = "set_fetch_importing_module_callback"
     callback = cast(callback, c_void_p)
     __callback_refs.append(callback)
@@ -418,7 +418,7 @@ def set_fetch_importing_module_callback(callback, /, module=0):
     assert c == 0, descriptive_message(c, _n)
 
 
-def set_fetch_importing_module_from_script_callback(callback, module=0, /):
+def set_fetch_importing_module_from_script_callback(callback, module=0):
     _n = "set_fetch_importing_module_from_script_callback"
     callback = cast(callback, c_void_p)
     __callback_refs.append(callback)
@@ -426,20 +426,20 @@ def set_fetch_importing_module_from_script_callback(callback, module=0, /):
     assert c == 0, descriptive_message(c, _n)
 
 
-def set_url(record, url, /):
+def set_url(record, url):
     url = cast(url, c_void_p)
     __callback_refs.append(url)  # not callback, but why not to keep the reference?
     c = chakra_core.JsSetModuleHostInfo(record, 6, url)
     assert c == 0, descriptive_message(c, "set_url")
 
 
-def set_import_meta_callback(callback, module=0, /):
+def set_import_meta_callback(callback, module=0):
     __callback_refs.append(callback)
     c = chakra_core.JsSetModuleHostInfo(module, 7, callback)
     assert c == 0, descriptive_message(c, "set_import_meta_callback")
 
 
-def set_module_ready_callback(callback, module=0, /):
+def set_module_ready_callback(callback, module=0):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy(module, ex):
         callback(module, ex)
@@ -449,7 +449,7 @@ def set_module_ready_callback(callback, module=0, /):
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
 
 
-def set_module_notify_callback(callback, module=0, /):
+def set_module_notify_callback(callback, module=0):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy(module, ex):
         # print("calling dummy6")
@@ -460,14 +460,14 @@ def set_module_notify_callback(callback, module=0, /):
     assert c == 0, descriptive_message(c, "set_module_notify_callback")
 
 
-def is_callable(value: JSValueRef, /) -> bool:
+def is_callable(value: JSValueRef) -> bool:
     result = c_bool()
     c = chakra_core.IsCallable(value, byref(result))
     assert c == 0, descriptive_message(c, "is_callable")
     return bool(result)
 
 
-def is_constructor(value: JSValueRef, /) -> bool:
+def is_constructor(value: JSValueRef) -> bool:
     result = c_bool()
     c = chakra_core.IsConstructor(value, byref(result))
     assert c == 0, descriptive_message(c, "is_callable")
@@ -571,7 +571,7 @@ def create_c_string(py_string: str):
     return result
 
 
-def c_array_to_iterator(array, length, /, offset=0):
+def c_array_to_iterator(array, length, offset=0):
     for index in range(offset, length):
         yield array[index]
 
@@ -584,7 +584,7 @@ def js_release(ref: JSValueRef):
     chakra_core.JsRelease(ref, 0)
 
 
-def js_value_to_string(value: JSValueRef, /) -> str:
+def js_value_to_string(value: JSValueRef) -> str:
     """
     Converts JavaScript value to python string
     """

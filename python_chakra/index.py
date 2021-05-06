@@ -26,7 +26,7 @@ class Boolean(ValueSkeleton):
 
 
 class Object(ValueSkeleton):
-    def __init__(self, /, *, value: JSValueRef = None,
+    def __init__(self, *, value: JSValueRef = None,
                  attach_to_global_as: str = None) -> None:
         if value is None:
             value = create_object()
@@ -38,17 +38,17 @@ class Object(ValueSkeleton):
                 raise TypeError()
             set_property(js_globalThis, attach_to_global_as, self)
 
-    def set_property(self, name: Union[str, int], value: JSValueRef, /) -> Object:
+    def set_property(self, name: Union[str, int], value: JSValueRef) -> Object:
         set_property(self, name, value)
         return self
 
-    def get_property(self, name: Union[str, int], /) -> JSValueRef:
+    def get_property(self, name: Union[str, int]) -> JSValueRef:
         return get_property(self, name)
 
-    def __getitem__(self, name: Union[str, int], /) -> JSValueRef:
+    def __getitem__(self, name: Union[str, int]) -> JSValueRef:
         return self.get_property(name)
 
-    def __setitem__(self, name: Union[str, int], value: JSValueRef, /) -> Object:
+    def __setitem__(self, name: Union[str, int], value: JSValueRef) -> Object:
         return self.set_property(name, value)
 
     def is_object(self):
@@ -185,7 +185,7 @@ class JSRuntime:
     __slots__ = "_as_parameter_", "__flags", "__runtime", \
                 "__context", "__module_runtime", "__promise_queue"
 
-    def __init__(self, /, *, flags: int = 0x22):
+    def __init__(self, *, flags: int = 0x22):
         self.__flags = flags
         self.__runtime = c_void_p()
         self.__context = c_void_p()
