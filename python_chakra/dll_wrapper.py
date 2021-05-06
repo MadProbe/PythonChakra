@@ -434,7 +434,6 @@ def set_url(record, url, /):
 
 
 def set_import_meta_callback(callback, module=0, /):
-    callback = cast(callback, c_void_p)
     __callback_refs.append(callback)
     c = chakra_core.JsSetModuleHostInfo(module, 7, callback)
     assert c == 0, descriptive_message(c, "set_import_meta_callback")
@@ -442,31 +441,37 @@ def set_import_meta_callback(callback, module=0, /):
 
 def set_module_ready_callback(callback, module=0, /):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
-    def dummy1(module, ex):
-        # print("calling dummyy")
+    def dummy(module, ex):
         callback(module, ex)
         return 0
-    casted = cast(dummy1, c_void_p)
-    # print(hex(casted.value))
-    __callback_refs.append(casted)
-    c = chakra_core.JsSetModuleHostInfo(module, 8, casted)
+    __callback_refs.append(dummy)
+    c = chakra_core.JsSetModuleHostInfo(module, 8, dummy)
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
 
 
 def set_module_notify_callback(callback, module=0, /):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
-    def dummy1(module, ex):
+    def dummy(module, ex):
         # print("calling dummy6")
         callback(module, ex)
         return 0
-    casted = cast(dummy1, c_void_p)
-    __callback_refs.append(casted)
-    c = chakra_core.JsSetModuleHostInfo(module, 3, casted)
+    __callback_refs.append(dummy)
+    c = chakra_core.JsSetModuleHostInfo(module, 3, dummy)
     assert c == 0, descriptive_message(c, "set_module_notify_callback")
 
 
-def is_callable(value: JSValueRef) -> bool:
-    return is_callable(value)
+def is_callable(value: JSValueRef, /) -> bool:
+    result = c_bool()
+    c = chakra_core.IsCallable(value, byref(result))
+    assert c == 0, descriptive_message(c, "is_callable")
+    return bool(result)
+
+
+def is_constructor(value: JSValueRef, /) -> bool:
+    result = c_bool()
+    c = chakra_core.IsConstructor(value, byref(result))
+    assert c == 0, descriptive_message(c, "is_callable")
+    return bool(result)
 
 
 def parse_module_source(record: c_void_p,

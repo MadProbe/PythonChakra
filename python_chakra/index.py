@@ -124,6 +124,10 @@ class Reflect():
     def is_callable(value: JSValueRef) -> bool:
         return is_callable(value)
 
+    @staticmethod
+    def is_constructor(value: JSValueRef) -> bool:
+        return is_constructor(value)
+
 
 class BigInt(ValueSkeleton):
     __slots__ = "__ints__", "_as_parameter_"
