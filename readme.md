@@ -1,5 +1,7 @@
 # Intro
 
+Creating a PR is highly appreciated!
+
 This module is a multifunctional and easy-to-use wrapper around [ChakraCore](https://github.com/chakra-core/ChakraCore) JavaScript engine (WIP)
 
 This wrapper includes:

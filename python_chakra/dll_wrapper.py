@@ -344,14 +344,21 @@ def js_eval(code):
     return call(js_eval_function, str_to_js_string(code))
 
 
-def to_number(value: Union[JSValueRef, int]) -> JSValueRef:
+def to_number(value: Union[JSValueRef, float, int]) -> JSValueRef:
     number = JSValueRef()
-    if type(value) is int:
-        c = chakra_core.JsIntToNumber(value, byref(number))
-    else:
+    if type(value) is JSValueRef:
         c = chakra_core.JsConvertValueToNumber(value, byref(number))
+    else:
+        c = chakra_core.JsDoubleToNumber(c_longdouble(value), byref(number))
     assert c == 0, descriptive_message(c, "to_number")
     return number
+
+
+def to_double(value: Union[JSValueRef, float, int]) -> float:
+    number = c_longdouble()
+    c = chakra_core.JsNumbertToDouble(to_number(value), byref(number))
+    assert c == 0, descriptive_message(c, "to_double")
+    return number.value
 
 
 def to_int(value: JSValueRef) -> int:
