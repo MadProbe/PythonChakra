@@ -62,7 +62,7 @@ class Number(ValueSkeleton):
             self._as_parameter_ = to_number(value)
             self.value = to_double(value)
 
-    def __update(self):
+    def __update(self) -> Number:
         self._as_parameter_ = to_number(self.value)
         return self
 
@@ -72,46 +72,55 @@ class Number(ValueSkeleton):
     def to_float(self) -> float:
         return self.value
 
-    def __iadd__(self, other: NumberLike):
+    def __iadd__(self, other: NumberLike) -> Number:
         self.value += self.__to_float(other)
         return self.__update()
 
-    def __isub__(self, other: NumberLike):
+    def __isub__(self, other: NumberLike) -> Number:
         self.value -= self.__to_float(other)
         return self.__update()
 
-    def __idiv__(self, other: NumberLike):
+    def __itruediv__(self, other: NumberLike) -> Number:
         self.value /= self.__to_float(other)
         return self.__update()
 
-    def __ifloordiv__(self, other: NumberLike):
+    def __ifloordiv__(self, other: NumberLike) -> Number:
         self.value //= self.__to_float(other)
         return self.__update()
 
-    def __imul__(self, other: NumberLike):
+    def __imul__(self, other: NumberLike) -> Number:
         self.value *= self.__to_float(other)
         return self.__update()
 
-    def __ipow__(self, other: NumberLike, modulo: Optional[NumberLike] = None):
-        self.value **= self.__to_float(other)
+    def __imod__(self, other: NumberLike) -> Number:
+        self.value %= self.__to_float(other)
         return self.__update()
 
-    def __add__(self, other: NumberLike):
+    def __ipow__(self, other: NumberLike,
+                 modulo: Optional[NumberLike] = None) -> Number:
+        if modulo is not None:
+            self.value = self.value ** self.__to_float(other) % self.__to_float(modulo)
+        else:
+            self.value **= self.__to_float(other)
+        return self.__update()
+
+    def __add__(self, other: NumberLike) -> Number:
         return Number(self).__iadd__(other)
 
-    def __sub__(self, other: NumberLike):
+    def __sub__(self, other: NumberLike) -> Number:
         return Number(self).__isub__(other)
 
-    def __truediv__(self, other: NumberLike):
-        return Number(self).__idiv__(other)
+    def __truediv__(self, other: NumberLike) -> Number:
+        return Number(self).__itruediv__(other)
 
-    def __floordiv__(self, other: NumberLike):
+    def __floordiv__(self, other: NumberLike) -> Number:
         return Number(self).__ifloordiv__(other)
 
-    def __mul__(self, other: NumberLike):
-        return Number(self).__imul__(other)
+    def __mod__(self, other: NumberLike) -> Number:
+        return Number(self).__imod__(other)
 
-    def __pow__(self, other: NumberLike, modulo: Optional[NumberLike] = None):
+    def __pow__(self, other: NumberLike, 
+                modulo: Optional[NumberLike] = None) -> Number:
         return Number(self).__ipow__(other, modulo)
 
     def __repr__(self) -> str:
@@ -123,8 +132,17 @@ class Number(ValueSkeleton):
     def __ne__(self, other: NumberLike) -> bool:
         return self.value != self.__to_float(other)
 
-    def __abs__(self):
-        return Number.from_(self)
+    def __abs__(self) -> Number:
+        return Number(abs(self.value))
+
+    def __neg__(self) -> Number:
+        return Number(-self.value)
+
+    def __pos__(self) -> Number:
+        return self
+    
+    def __bool__(self) -> bool:
+        return self.value != 0.0
 
     def __to_float(self, other) -> float:
         if type(other) is float:
