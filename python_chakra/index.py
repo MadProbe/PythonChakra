@@ -119,7 +119,7 @@ class Number(ValueSkeleton):
     def __mod__(self, other: NumberLike) -> Number:
         return Number(self).__imod__(other)
 
-    def __pow__(self, other: NumberLike, 
+    def __pow__(self, other: NumberLike,
                 modulo: Optional[NumberLike] = None) -> Number:
         return Number(self).__ipow__(other, modulo)
 
@@ -140,7 +140,7 @@ class Number(ValueSkeleton):
 
     def __pos__(self) -> Number:
         return self
-    
+
     def __bool__(self) -> bool:
         return self.value != 0.0
 
