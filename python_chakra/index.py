@@ -1,6 +1,8 @@
 from __future__ import annotations
 from os import getcwd
-from typing import Any, Optional, Union
+from sys import maxsize
+from math import floor, ceil, trunc
+from typing import Any, Optional, Tuple, Union
 from .dll_wrapper import *
 from .modules import (JavaScriptModule, ModuleRuntime,
                       default_loader, default_path_resolver)
@@ -65,6 +67,9 @@ class Number(ValueSkeleton):
     def __update(self) -> Number:
         self._as_parameter_ = to_number(self.value)
         return self
+
+    def as_integer_ratio(self) -> Tuple[int, int]:
+        return self.value.as_integer_ratio()
 
     def is_number(self):
         return True
@@ -170,6 +175,18 @@ class Number(ValueSkeleton):
             return to_double(other)
         else:
             return float(other)
+
+    def __ceil__(self) -> int:
+        return ceil(self.value)
+
+    def __floor__(self) -> int:
+        return floor(self.value)
+
+    def __trunc__(self) -> int:
+        return trunc(self.value)
+
+    def __round__(self, ndigits: Optional[int] = None) -> int:
+        return round(self.value, ndigits)
 
     @staticmethod
     def from_(value: NumberLike) -> Number:
