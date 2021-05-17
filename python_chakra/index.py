@@ -78,35 +78,37 @@ class Number(ValueSkeleton):
         return self.value
 
     def __iadd__(self, other: NumberLike) -> Number:
-        self.value += self.__to_float(other)
+        self.value += _to_float(other)
         return self.__update()
 
     def __isub__(self, other: NumberLike) -> Number:
-        self.value -= self.__to_float(other)
+        self.value -= _to_float(other)
         return self.__update()
 
     def __itruediv__(self, other: NumberLike) -> Number:
-        self.value /= self.__to_float(other)
+        self.value /= _to_float(other)
         return self.__update()
 
     def __ifloordiv__(self, other: NumberLike) -> Number:
-        self.value //= self.__to_float(other)
+        self.value //= _to_float(other)
         return self.__update()
 
     def __imul__(self, other: NumberLike) -> Number:
-        self.value *= self.__to_float(other)
+        self.value *= _to_float(other)
         return self.__update()
 
     def __imod__(self, other: NumberLike) -> Number:
-        self.value %= self.__to_float(other)
+        self.value %= _to_float(other)
         return self.__update()
 
     def __ipow__(self, other: NumberLike,
                  modulo: Optional[NumberLike] = None) -> Number:
         if modulo is not None:
-            self.value = self.value ** self.__to_float(other) % self.__to_float(modulo)
+            other = _to_float(other)
+            modulo = _to_float(modulo)
+            self.value = self.value ** other % modulo
         else:
-            self.value **= self.__to_float(other)
+            self.value **= _to_float(other)
         return self.__update()
 
     def __add__(self, other: NumberLike) -> Number:
@@ -132,10 +134,10 @@ class Number(ValueSkeleton):
         return f"Number(value={self.value})"
 
     def __eq__(self, other: NumberLike) -> bool:
-        return self.value == self.__to_float(other)
+        return self.value == _to_float(other)
 
     def __ne__(self, other: NumberLike) -> bool:
-        return self.value != self.__to_float(other)
+        return self.value != _to_float(other)
 
     def __abs__(self) -> Number:
         return Number(abs(self.value))
@@ -167,14 +169,6 @@ class Number(ValueSkeleton):
                 yield None
             else:
                 yield int(digit_or_dot)
-
-    def __to_float(self, other) -> float:
-        if type(other) is float:
-            return other
-        elif type(other) is JSValueRef:
-            return to_double(other)
-        else:
-            return float(other)
 
     def __ceil__(self) -> int:
         return ceil(self.value)
@@ -311,8 +305,15 @@ _refs = []
 NumberLike = Union[Number, JSValueRef, int, float]
 
 
-def _to_float():
-    pass
+def _to_float(other: NumberLike) -> float:
+    if type(other) is float:
+        return other
+    elif type(other) is Number:
+        return other.value
+    elif type(other) is JSValueRef:
+        return to_double(other)
+    else:
+        return float(other)
 
 
 class JSRuntime:
@@ -417,7 +418,7 @@ class JSRuntime:
             for ref in _refs:
                 js_release(ref)
         except:  # noqa: E722
-            print("Failed to dispose ref")
+            print("Failed to dispose object references")
         try:
             set_current_context(0)
             dispose_runtime(self)
