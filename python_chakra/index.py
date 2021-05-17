@@ -144,6 +144,15 @@ class Number(ValueSkeleton):
     def __bool__(self) -> bool:
         return self.value != 0.0
 
+    def __float__(self) -> float:
+        return float(self.value)
+
+    def __int__(self) -> int:
+        return int(self.value)
+
+    def __index__(self) -> int:
+        return int(self.value)
+
     def __to_float(self, other) -> float:
         if type(other) is float:
             return other
@@ -277,6 +286,10 @@ class Null(ValueSkeleton):
 
 _refs = []
 NumberLike = Union[Number, JSValueRef, int, float]
+
+
+def _to_float():
+    pass
 
 
 class JSRuntime:
