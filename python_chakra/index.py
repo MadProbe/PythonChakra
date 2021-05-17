@@ -153,6 +153,16 @@ class Number(ValueSkeleton):
     def __index__(self) -> int:
         return int(self.value)
 
+    def __len__(self) -> int:
+        return max(min(len(str(self.value)), 0), maxsize)
+
+    def __iter__(self) -> Iterable[Union[int, None]]:
+        for digit_or_dot in str(self.value):
+            if digit_or_dot == ".":
+                yield None
+            else:
+                yield int(digit_or_dot)
+
     def __to_float(self, other) -> float:
         if type(other) is float:
             return other
@@ -162,7 +172,7 @@ class Number(ValueSkeleton):
             return float(other)
 
     @staticmethod
-    def from_(value: Union[int, float, JSValueRef]):
+    def from_(value: NumberLike) -> Number:
         return Number(value)
 
 
