@@ -188,10 +188,6 @@ class Number(ValueSkeleton):
     def __round__(self, ndigits: Optional[int] = None) -> int:
         return round(self.value, ndigits)
 
-    @staticmethod
-    def from_(value: NumberLike) -> Number:
-        return Number(value)
-
 
 class String(ValueSkeleton):
     def __init__(self) -> None:
