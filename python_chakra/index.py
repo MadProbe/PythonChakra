@@ -32,7 +32,7 @@ class Object(ValueSkeleton):
                 raise TypeError()
             set_property(js_globalThis, attach_to_global_as, self)
 
-    def set_property(self, name: Union[str, int], value: JSValueRef) -> Object:
+    def set_property(self, name: Union[str, int], value: JSValueRef):
         set_property(self, name, value)
         return self
 
@@ -42,7 +42,7 @@ class Object(ValueSkeleton):
     def __getitem__(self, name: Union[str, int]) -> JSValueRef:
         return self.get_property(name)
 
-    def __setitem__(self, name: Union[str, int], value: JSValueRef) -> Object:
+    def __setitem__(self, name: Union[str, int], value: JSValueRef):
         return self.set_property(name, value)
 
     def is_object(self):

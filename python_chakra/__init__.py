@@ -1,7 +1,8 @@
 import sys
 
-assert sys.version_info >= (3, 7), \
-    "Only versions of C Python interpreter greater than or equal to 3.7 are supported"
+assert sys.version_info >= (3, 7), "Only Python >= 3.7 is supported!"
+
+del sys
 
 from .index import *  # noqa: F401, E402
 
