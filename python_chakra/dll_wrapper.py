@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from ctypes import *
 from enum import IntEnum
@@ -5,7 +7,7 @@ from functools import wraps
 from traceback import format_exception
 from typing import Iterable, List, Literal, Union
 
-from .utils import chakra_core, FIFOQueue
+from .utils import FIFOQueue, chakra_core
 
 
 class ErrorCodesEnum(IntEnum):
@@ -49,6 +51,7 @@ nullptr = POINTER(c_int)()
 StrictModeType = Union[bool, Literal[0, 1]]
 JSValueRef = c_void_p
 JSRef = c_void_p
+_NumberLike = Union[POINTER(JSValueRef), JSValueRef, float, int]
 c_func_type = chakra_core._FuncPtr
 c_true = 1
 c_false = 0
@@ -344,9 +347,9 @@ def js_eval(code):
     return call(js_eval_function, str_to_js_string(code))
 
 
-def to_number(value: Union[JSValueRef, float, int]) -> JSValueRef:
+def to_number(value: _NumberLike) -> JSValueRef:
     number = JSValueRef()
-    if type(value) is JSValueRef:
+    if type(value) is POINTER(JSValueRef) or type(value) is JSValueRef:
         c = chakra_core.JsConvertValueToNumber(value, byref(number))
     else:
         c = chakra_core.JsDoubleToNumber(c_longdouble(value), byref(number))
@@ -354,9 +357,9 @@ def to_number(value: Union[JSValueRef, float, int]) -> JSValueRef:
     return number
 
 
-def to_double(value: Union[JSValueRef, float, int]) -> float:
+def to_double(value: _NumberLike) -> float:
     number = c_longdouble()
-    c = chakra_core.JsNumbertToDouble(to_number(value), byref(number))
+    c = chakra_core.JsNumberToDouble(to_number(value), byref(number))
     assert c == 0, descriptive_message(c, "to_double")
     return number.value
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
+
+from math import ceil, floor, trunc
 from os import getcwd
 from sys import maxsize
-from math import floor, ceil, trunc
 from typing import Any, Optional, Tuple, Union
+
 from .dll_wrapper import *
-from .modules import (JavaScriptModule, ModuleRuntime,
-                      default_loader, default_path_resolver)
+from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
+                      default_path_resolver)
 from .utils import ValueSkeleton
 
 
@@ -122,6 +124,9 @@ class Number(ValueSkeleton):
 
     def __floordiv__(self, other: NumberLike) -> Number:
         return Number(self).__ifloordiv__(other)
+
+    def __divmod__(self, other: NumberLike) -> Tuple[Number, Number]:
+        return (self // other, self % other)
 
     def __mod__(self, other: NumberLike) -> Number:
         return Number(self).__imod__(other)
