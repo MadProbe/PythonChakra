@@ -144,6 +144,18 @@ class Number(ValueSkeleton):
     def __ne__(self, other: NumberLike) -> bool:
         return self.value != _to_float(other)
 
+    def __gt__(self, other: NumberLike) -> bool:
+        return self.value > _to_float(other)
+
+    def __ge__(self, other: NumberLike) -> bool:
+        return self.value >= _to_float(other)
+
+    def __lt__(self, other: NumberLike) -> bool:
+        return self.value < _to_float(other)
+
+    def __le__(self, other: NumberLike) -> bool:
+        return self.value <= _to_float(other)
+
     def __abs__(self) -> Number:
         return Number(abs(self.value))
 
