@@ -93,7 +93,7 @@ def default_loader(_, url: URL):
         if name == "posix":
             href = "/" + href
         with open(href, 'r') as file:
-            return ''.join(file.readlines())
+            return file.read()
     else:
         raise TypeError(f"Path scheme \"{scheme}\" is not supported")
 

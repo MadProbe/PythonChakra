@@ -28,7 +28,7 @@ with JSRuntime() as (runtime, global_this):
 
     @javascript_method()
     def count(a: JSValueRef = None, b: JSValueRef = None, **_):
-        return (Number(a) + Number(b))._as_parameter_.value
+        return Number(a) + Number(b)
     global_this["writeln"] = create_function(log, "log",
                                              attach_to_global_as="print",
                                              attach_to=console)

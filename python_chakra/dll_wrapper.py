@@ -131,10 +131,15 @@ def javascript_method(constructor=False, fname=None):
                         this = None
                     else:
                         this = args[0]
-                    return function(*c_array_to_iterator(args, arg_count, 1),
-                                    this=this,
-                                    callee=callee,
-                                    new_call=bool(new_call))
+                    r = function(*c_array_to_iterator(args, arg_count, 1),
+                                 this=this,
+                                 callee=callee,
+                                 new_call=bool(new_call))
+                    while r is not None and hasattr(r, "_as_parameter_"):
+                        r = r._as_parameter_
+                    if type(r) is JSValueRef:
+                        r = r.value
+                    return r
                 except Exception as ex:
                     message = format_exception(type(ex), ex, ex.__traceback__)
                     throw(create_error('\n'.join(message)))
