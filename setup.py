@@ -1,17 +1,15 @@
 """
 Parts of this file were taken from the discord.py project
-(https://github.com/Rapptz/discord.py) which have been permitted for use under the
-MIT license.
+(https://github.com/Rapptz/discord.py)
+which have been permitted for use under the MIT license.
 """
 
 from setuptools import setup
 import re
 
-requirements = []
 with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
-version = ''
 with open('python_chakra/__init__.py') as f:
     version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
                         f.read(), re.MULTILINE).group(1)
@@ -19,14 +17,15 @@ with open('python_chakra/__init__.py') as f:
 if not version:
     raise RuntimeError('version is not set')
 
-readme = ''
 with open('readme.md') as f:
     readme = f.read()
 
+repo = "https://github.com/MadProbe/PythonChakra"
+
 setup(name='python-chakra',
       author='MadProbe',
-      url='https://github.com/MadProbe/PythonChakra',
-      project_urls={"Issue tracker": "https://github.com/MadProbe/PythonChakra/issues"},
+      url=repo,
+      project_urls={"Issue tracker": f"{repo}/issues"},
       version=version,
       packages=['python_chakra', 'python_chakra.utils'],
       license='MIT',

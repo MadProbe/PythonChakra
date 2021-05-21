@@ -1,18 +1,14 @@
+from __future__ import annotations
+
+from math import ceil, floor, trunc
 from os import getcwd
-from typing import Any, Union
+from sys import maxsize
+from typing import Any, Optional, Tuple, Union
+
 from .dll_wrapper import *
-from .modules import (JavaScriptModule, ModuleRuntime,
-                      default_loader, default_path_resolver)
+from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
+                      default_path_resolver)
 from .utils import ValueSkeleton
-
-
-# Forwards
-class Object:
-    pass
-
-
-class BigInt:
-    pass
 
 
 class Boolean(ValueSkeleton):
@@ -38,7 +34,7 @@ class Object(ValueSkeleton):
                 raise TypeError()
             set_property(js_globalThis, attach_to_global_as, self)
 
-    def set_property(self, name: Union[str, int], value: JSValueRef) -> Object:
+    def set_property(self, name: Union[str, int], value: JSValueRef):
         set_property(self, name, value)
         return self
 
@@ -48,7 +44,7 @@ class Object(ValueSkeleton):
     def __getitem__(self, name: Union[str, int]) -> JSValueRef:
         return self.get_property(name)
 
-    def __setitem__(self, name: Union[str, int], value: JSValueRef) -> Object:
+    def __setitem__(self, name: Union[str, int], value: JSValueRef):
         return self.set_property(name, value)
 
     def is_object(self):
@@ -56,8 +52,152 @@ class Object(ValueSkeleton):
 
 
 class Number(ValueSkeleton):
-    def __init__(self) -> None:
-        pass
+    __slots__ = "_as_parameter_", "value"
+    _as_parameter_: JSValueRef
+    value: float
+
+    def __init__(self, value: NumberLike) -> None:
+        if type(value) is Number:
+            # Borrow properties from Number
+            # for a small optimization (speed + memory)
+            self._as_parameter_ = value._as_parameter_
+            self.value = value.value
+        else:
+            self._as_parameter_ = to_number(value)
+            self.value = to_double(value)
+
+    def __update(self) -> Number:
+        self._as_parameter_ = to_number(self.value)
+        return self
+
+    def as_integer_ratio(self) -> Tuple[int, int]:
+        return self.value.as_integer_ratio()
+
+    def is_number(self):
+        return True
+
+    def to_float(self) -> float:
+        return self.value
+
+    def __iadd__(self, other: NumberLike) -> Number:
+        self.value += _to_float(other)
+        return self.__update()
+
+    def __isub__(self, other: NumberLike) -> Number:
+        self.value -= _to_float(other)
+        return self.__update()
+
+    def __itruediv__(self, other: NumberLike) -> Number:
+        self.value /= _to_float(other)
+        return self.__update()
+
+    def __ifloordiv__(self, other: NumberLike) -> Number:
+        self.value //= _to_float(other)
+        return self.__update()
+
+    def __imul__(self, other: NumberLike) -> Number:
+        self.value *= _to_float(other)
+        return self.__update()
+
+    def __imod__(self, other: NumberLike) -> Number:
+        self.value %= _to_float(other)
+        return self.__update()
+
+    def __ipow__(self, other: NumberLike,
+                 modulo: Optional[NumberLike] = None) -> Number:
+        if modulo is not None:
+            other = _to_float(other)
+            modulo = _to_float(modulo)
+            self.value = self.value ** other % modulo
+        else:
+            self.value **= _to_float(other)
+        return self.__update()
+
+    def __add__(self, other: NumberLike) -> Number:
+        return Number(self).__iadd__(other)
+
+    def __sub__(self, other: NumberLike) -> Number:
+        return Number(self).__isub__(other)
+
+    def __truediv__(self, other: NumberLike) -> Number:
+        return Number(self).__itruediv__(other)
+
+    def __floordiv__(self, other: NumberLike) -> Number:
+        return Number(self).__ifloordiv__(other)
+
+    def __divmod__(self, other: NumberLike) -> Tuple[Number, Number]:
+        return (self // other, self % other)
+
+    def __mod__(self, other: NumberLike) -> Number:
+        return Number(self).__imod__(other)
+
+    def __pow__(self, other: NumberLike,
+                modulo: Optional[NumberLike] = None) -> Number:
+        return Number(self).__ipow__(other, modulo)
+
+    def __repr__(self) -> str:
+        return f"Number(value={self.value})"
+
+    def __eq__(self, other: NumberLike) -> bool:
+        return self.value == _to_float(other)
+
+    def __ne__(self, other: NumberLike) -> bool:
+        return self.value != _to_float(other)
+
+    def __gt__(self, other: NumberLike) -> bool:
+        return self.value > _to_float(other)
+
+    def __ge__(self, other: NumberLike) -> bool:
+        return self.value >= _to_float(other)
+
+    def __lt__(self, other: NumberLike) -> bool:
+        return self.value < _to_float(other)
+
+    def __le__(self, other: NumberLike) -> bool:
+        return self.value <= _to_float(other)
+
+    def __abs__(self) -> Number:
+        return Number(abs(self.value))
+
+    def __neg__(self) -> Number:
+        return Number(-self.value)
+
+    def __pos__(self) -> Number:
+        return self
+
+    def __bool__(self) -> bool:
+        return self.value != 0.0
+
+    def __float__(self) -> float:
+        return float(self.value)
+
+    def __int__(self) -> int:
+        return int(self.value)
+
+    def __index__(self) -> int:
+        return int(self.value)
+
+    def __len__(self) -> int:
+        return max(min(len(str(self.value)), 0), maxsize)
+
+    def __iter__(self) -> Iterable[Union[int, None]]:
+        for digit_or_dot in str(self.value):
+            if digit_or_dot == ".":
+                yield None
+            else:
+                yield int(digit_or_dot)
+
+    def __ceil__(self) -> int:
+        return ceil(self.value)
+
+    def __floor__(self) -> int:
+        return floor(self.value)
+
+    def __trunc__(self) -> int:
+        return trunc(self.value)
+
+    def __round__(self, ndigits: Optional[int] = None) -> int:
+        return round(self.value, ndigits)
 
 
 class String(ValueSkeleton):
@@ -179,6 +319,18 @@ class Null(ValueSkeleton):
 
 
 _refs = []
+NumberLike = Union[Number, JSValueRef, int, float]
+
+
+def _to_float(other: NumberLike) -> float:
+    if type(other) is float:
+        return other
+    elif type(other) is Number:
+        return other.value
+    elif type(other) is JSValueRef:
+        return to_double(other)
+    else:
+        return float(other)
 
 
 class JSRuntime:
@@ -283,7 +435,7 @@ class JSRuntime:
             for ref in _refs:
                 js_release(ref)
         except:  # noqa: E722
-            print("Failed to dispose ref")
+            print("Failed to dispose object references")
         try:
             set_current_context(0)
             dispose_runtime(self)

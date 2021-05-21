@@ -1,4 +1,10 @@
-from .index import *  # noqa: F401
+import sys
+
+assert sys.version_info >= (3, 7), "Only Python >= 3.7 is supported!"
+
+del sys
+
+from .index import *  # noqa: F401, E402
 
 __title__ = "python_chakra"
 __author__ = "MadProbe"

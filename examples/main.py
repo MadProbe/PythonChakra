@@ -25,11 +25,16 @@ with JSRuntime() as (runtime, global_this):
     @javascript_method()
     def write_(*args, **_):
         print(*map(js_value_to_string, args), end=None)
+
+    @javascript_method()
+    def count(a: JSValueRef = None, b: JSValueRef = None, **_):
+        return Number(a) + Number(b)
     global_this["writeln"] = create_function(log, "log",
                                              attach_to_global_as="print",
                                              attach_to=console)
     create_function(warn, "warn", attach_to=console)
     create_function(error, "error", attach_to=console)
     create_function(write_, "write", attach_to_global_as=True)
+    create_function(count, "count", attach_to_global_as=True)
 
     runtime.exec_module("./examples/test.js")

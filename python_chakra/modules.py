@@ -18,8 +18,11 @@ class ModuleFIFOQueue:
     pass
 
 
-PathResolverFunctionType = Callable[[Callable[[None, str, str], URL], str, str], URL]
-LoaderFunctionType = Callable[[Callable[[None, str], URL], str], URL]
+_DefaultPathResolverFunction = Callable[[None, str, str], URL]
+PathResolverFunctionType = Callable[[_DefaultPathResolverFunction,
+                                     str, str], URL]
+_DefaultLoaderFunctionType = Callable[[None, str], URL]
+LoaderFunctionType = Callable[[_DefaultLoaderFunctionType, str], URL]
 ModuleOrNone = Union[JavaScriptModule, None]
 
 
@@ -52,13 +55,9 @@ class JavaScriptModule:
         set_url(module, self.spec)
 
     def parse(self):
-        script = str_to_array(self.code + "\0", encoding="UTF-16")
-        # TODO: Properly handle syntax errors of the module code
-        parse_module_source(self,
-                            self.cookie,
-                            script,
-                            len(script),
-                            0)
+        script = str_to_array(self.code, encoding="UTF-16")
+        # TODO: Properly handle syntax errors
+        parse_module_source(self, self.cookie, script)
         if self.root:
             self.__module_queue.exec()
 
@@ -73,10 +72,10 @@ class JavaScriptModule:
         self.spec = None
 
 
-def default_path_resolver(_, base, spec) -> URL:
+def default_path_resolver(_, base: str, spec: str) -> URL:
     if is_valid_url(spec):
         return parse_url(spec)
-    elif spec.startswith("/") or spec.startswith("./") or spec.startswith("../"):
+    elif spec.startswith(("/", "./", "../")):
         return parse_url(spec, base=base)
     raise SyntaxError("Cannot resolve path %s" % spec)
 
@@ -94,7 +93,7 @@ def default_loader(_, url: URL):
         if name == "posix":
             href = "/" + href
         with open(href, 'r') as file:
-            return ''.join(file.readlines())
+            return file.read()
     else:
         raise TypeError(f"Path scheme \"{scheme}\" is not supported")
 

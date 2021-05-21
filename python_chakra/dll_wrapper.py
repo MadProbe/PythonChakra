@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from ctypes import *
 from enum import IntEnum
@@ -5,7 +7,7 @@ from functools import wraps
 from traceback import format_exception
 from typing import Iterable, List, Literal, Union
 
-from .utils import chakra_core, FIFOQueue
+from .utils import FIFOQueue, chakra_core
 
 
 class ErrorCodesEnum(IntEnum):
@@ -39,8 +41,8 @@ class PromiseFIFOQueue(FIFOQueue):
                                        arguments, 1, byref(result))
             # print("Done promise continuation callback")
         except Exception as ex:
-            print("An error happed when executed promise continuation callback:",
-                  ex, sep="\n")
+            print("An error happed when executed",
+                  "promise continuation callback:", ex, sep="\n")
         finally:
             js_release(c_void_p(task))
 
@@ -49,6 +51,7 @@ nullptr = POINTER(c_int)()
 StrictModeType = Union[bool, Literal[0, 1]]
 JSValueRef = c_void_p
 JSRef = c_void_p
+_NumberLike = Union[POINTER(JSValueRef), JSValueRef, float, int]
 c_func_type = chakra_core._FuncPtr
 c_true = 1
 c_false = 0
@@ -119,19 +122,24 @@ def javascript_method(constructor=False, fname=None):
                    POINTER(POINTER(JSValueRef)),
                    c_ushort, c_void_p)
         @wraps(function)
-        def dummy(callee, new_call, arguments, arguments_count, __user_data__):
+        def dummy(callee, new_call, args, arg_count, __user_data__):
             if new_call and not constructor:
                 throw(create_type_error(f"{name} is not constructor"))
             else:
                 try:
-                    if arguments_count == 0:
+                    if arg_count == 0:
                         this = None
                     else:
-                        this = arguments[0]
-                    return function(*c_array_to_iterator(arguments, arguments_count, 1),
-                                    this=this,
-                                    callee=callee,
-                                    new_call=bool(new_call))
+                        this = args[0]
+                    r = function(*c_array_to_iterator(args, arg_count, 1),
+                                 this=this,
+                                 callee=callee,
+                                 new_call=bool(new_call))
+                    while r is not None and hasattr(r, "_as_parameter_"):
+                        r = r._as_parameter_
+                    if type(r) is JSValueRef:
+                        r = r.value
+                    return r
                 except Exception as ex:
                     message = format_exception(type(ex), ex, ex.__traceback__)
                     throw(create_error('\n'.join(message)))
@@ -344,14 +352,21 @@ def js_eval(code):
     return call(js_eval_function, str_to_js_string(code))
 
 
-def to_number(value: Union[JSValueRef, int]) -> JSValueRef:
+def to_number(value: _NumberLike) -> JSValueRef:
     number = JSValueRef()
-    if type(value) is int:
-        c = chakra_core.JsIntToNumber(value, byref(number))
-    else:
+    if type(value) is POINTER(JSValueRef) or type(value) is JSValueRef:
         c = chakra_core.JsConvertValueToNumber(value, byref(number))
+    else:
+        c = chakra_core.JsDoubleToNumber(c_longdouble(value), byref(number))
     assert c == 0, descriptive_message(c, "to_number")
     return number
+
+
+def to_double(value: _NumberLike) -> float:
+    number = c_longdouble()
+    c = chakra_core.JsNumberToDouble(to_number(value), byref(number))
+    assert c == 0, descriptive_message(c, "to_double")
+    return number.value
 
 
 def to_int(value: JSValueRef) -> int:
@@ -388,14 +403,13 @@ def inspect(value: JSValueRef, indent="\t") -> str:
 
 def set_promise_callback(callback):
     __callback_refs.append(callback)
-    c = chakra_core.JsSetPromiseContinuationCallback(cast(callback, c_void_p),
-                                                     0)
+    c = chakra_core.JsSetPromiseContinuationCallback(callback, 0)
     assert c == 0, descriptive_message(c, "set_promise_callback")
 
 
 def set_rejections_callback(callback):
     __callback_refs.append(callback)
-    c = chakra_core.JsSetHostPromiseRejectionTracker(cast(callback, c_void_p), 0)
+    c = chakra_core.JsSetHostPromiseRejectionTracker(callback, 0)
     assert c == 0, descriptive_message(c, "set_rejections_callback")
 
 
@@ -428,7 +442,7 @@ def set_fetch_importing_module_from_script_callback(callback, module=0):
 
 def set_url(record, url):
     url = cast(url, c_void_p)
-    __callback_refs.append(url)  # not callback, but why not to keep the reference?
+    __callback_refs.append(url)  # not callback, but why not to keep it?
     c = chakra_core.JsSetModuleHostInfo(record, 6, url)
     assert c == 0, descriptive_message(c, "set_url")
 
@@ -477,15 +491,14 @@ def is_constructor(value: JSValueRef) -> bool:
 def parse_module_source(record: c_void_p,
                         context_count: int,
                         script: c_char_p,
-                        script_len: int,
-                        flags: int):
+                        flags: int = 0):
     ex = c_void_p()
     # print(len(script))
     # print(script_len)
     c = chakra_core.JsParseModuleSource(record,
                                         context_count,
                                         script,
-                                        len(script) - 2,
+                                        len(script),
                                         flags,
                                         byref(ex))
     # print(js_value_to_string(ex))
@@ -588,7 +601,8 @@ def js_value_to_string(value: JSValueRef) -> str:
     """
     Converts JavaScript value to python string
     """
-    # Convert script result to String in JavaScript; redundant if script returns a String
+    # Convert script result to String in JavaScript;
+    # redundant if script returns a String
     result_js_string: JSValueRef = c_void_p()
     chakra_core.JsConvertValueToString(value, byref(result_js_string))
 
