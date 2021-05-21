@@ -486,7 +486,6 @@ def is_constructor(value: JSValueRef) -> bool:
 def parse_module_source(record: c_void_p,
                         context_count: int,
                         script: c_char_p,
-                        script_len: int,
                         flags: int = 0):
     ex = c_void_p()
     # print(len(script))
@@ -494,7 +493,7 @@ def parse_module_source(record: c_void_p,
     c = chakra_core.JsParseModuleSource(record,
                                         context_count,
                                         script,
-                                        len(script) - 2,
+                                        len(script),
                                         flags,
                                         byref(ex))
     # print(js_value_to_string(ex))

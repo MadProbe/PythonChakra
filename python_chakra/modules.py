@@ -55,9 +55,9 @@ class JavaScriptModule:
         set_url(module, self.spec)
 
     def parse(self):
-        script = str_to_array(self.code + "\0", encoding="UTF-16")
-        # TODO: Properly handle syntax errors of the module code
-        parse_module_source(self, self.cookie, script, len(script))
+        script = str_to_array(self.code, encoding="UTF-16")
+        # TODO: Properly handle syntax errors
+        parse_module_source(self, self.cookie, script)
         if self.root:
             self.__module_queue.exec()
 
