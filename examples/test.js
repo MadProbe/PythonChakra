@@ -22,10 +22,10 @@ console.log(import.meta.url)
 // console.log("124");
 await test()
 await import("./test3.js").then(() => console.log(".then: After dynamic import"));
-console.log("After await dynamic import");
+print("After await dynamic import");
 await test()
 try {
-    console.log("Count:", count(1, 4))
+    writeln("Count:", count(1, 4))
 } catch (error) {
     console.error(error);
 }

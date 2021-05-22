@@ -2,13 +2,73 @@ from __future__ import annotations
 
 from math import ceil, floor, trunc
 from os import getcwd
+from traceback import format_exception
 from sys import maxsize
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from .dll_wrapper import *
 from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
                       default_path_resolver)
 from .utils import ValueSkeleton
+
+
+def jsfunc(constructor=False, fname=None,
+           attach_to_global_as: GlobalAttachments = None,
+           attach_to_as: Union[str, None] = None,
+           attach_to: Union[JSValueRef, None] = None):
+    def wrapper(function):
+        nonlocal attach_to, attach_to_as, attach_to_global_as
+        name = fname if fname is not None else function.__name__
+
+        @CFUNCTYPE(c_void_p, JSValueRef, c_bool,
+                   POINTER(POINTER(JSValueRef)),
+                   c_ushort, c_void_p)
+        def dummy(callee, new_call, args, arg_count, _):
+            if new_call and not constructor:
+                throw(create_type_error(f"{name} is not a constructor"))
+            else:
+                try:
+                    if arg_count == 0:
+                        this = None
+                    else:
+                        this = args[0]
+                    r = function(*c_array_to_iterator(args, arg_count, 1),
+                                 this=this,
+                                 callee=callee,
+                                 new_call=bool(new_call))
+                    while r is not None and hasattr(r, "_as_parameter_"):
+                        r = r._as_parameter_
+                    if type(r) is JSValueRef:
+                        r = r.value
+                    return r
+                except Exception as ex:
+                    message = format_exception(type(ex), ex, ex.__traceback__)
+                    throw(create_error('\n'.join(message)))
+
+        _frefs.append(dummy)
+        function._as_parameter_ = create_function(dummy, name)
+        if attach_to_global_as:
+            if attach_to_global_as is True:
+                if name is None:
+                    raise TypeError
+                attach_to_global_as = name
+            if type(attach_to_global_as) is tuple:
+                for prop in attach_to_global_as:
+                    if prop is True:
+                        if name is None:
+                            raise TypeError
+                        prop = name
+                    set_property(js_globalThis, prop, function)
+            else:
+                set_property(js_globalThis, attach_to_global_as, function)
+        if attach_to:
+            if not attach_to_as:
+                if name is None:
+                    raise TypeError
+                attach_to_as = name
+            set_property(attach_to, attach_to_as, function)
+        return function
+    return wrapper
 
 
 class Boolean(ValueSkeleton):
@@ -21,8 +81,15 @@ class Boolean(ValueSkeleton):
         return True
 
 
+class VirtualObjectWrapper:
+    def __init__(self) -> None:
+        pass
+
+
 class Object(ValueSkeleton):
-    def __init__(self, *, value: JSValueRef = None,
+    __virtual__: Dict[Union[str, int], Any] = dict()
+
+    def __init__(self, value: JSValueRef = None,
                  attach_to_global_as: str = None) -> None:
         if value is None:
             value = create_object()
@@ -241,6 +308,10 @@ class Array(Object):
         return True
 
 
+class LogicalError(Exception):
+    pass
+
+
 class NotConstructableError(Exception):
     """
     Indicates that class is not constructable
@@ -319,7 +390,10 @@ class Null(ValueSkeleton):
 
 
 _refs = []
+_frefs = []
 NumberLike = Union[Number, JSValueRef, int, float]
+_True = Literal[True]
+GlobalAttachments = Union[Tuple[Union[str, _True], ...], str, _True, None]
 
 
 def _to_float(other: NumberLike) -> float:
@@ -333,11 +407,17 @@ def _to_float(other: NumberLike) -> float:
         return float(other)
 
 
+_runtime: c_void_p = None
+
+
 class JSRuntime:
     __slots__ = "_as_parameter_", "__flags", "__runtime", \
                 "__context", "__module_runtime", "__promise_queue"
 
     def __init__(self, *, flags: int = 0x22):
+        global _runtime
+        if _runtime:
+            raise LogicalError("A runtime is already created!")
         self.__flags = flags
         self.__runtime = c_void_p()
         self.__context = c_void_p()
@@ -385,7 +465,7 @@ class JSRuntime:
     def __queue_promise(self, task):
         # print("__queue_promise")
         add_ref(c_void_p(task))
-        self.__promise_queue.append(task)
+        self.__promise_queue.append(c_void_p(task))
 
     def memory_limit(self, limit: int = None) -> Union[int, None]:
         if limit is None:
@@ -401,8 +481,10 @@ class JSRuntime:
         return self.__enter__()
 
     def __enter__(self):
+        global _runtime
         self.__runtime = create_runtime(self.__flags)
         self._as_parameter_ = self.__runtime
+        _runtime = self.__runtime
         self.__context = create_context(self)
         set_current_context(self.__context)
         init_utilitites()
@@ -424,6 +506,7 @@ class JSRuntime:
         return self, Object(value=js_globalThis)
 
     def __exit__(self, *_):
+        global _runtime, _frefs
         try:
             module: JavaScriptModule
             for module in self.__module_runtime.modules.values():
@@ -436,6 +519,7 @@ class JSRuntime:
                 js_release(ref)
         except:  # noqa: E722
             print("Failed to dispose object references")
+        _frefs.clear()
         try:
             set_current_context(0)
             dispose_runtime(self)
@@ -444,5 +528,6 @@ class JSRuntime:
         # else:
             # print("P")
         self.__runtime = None
+        _runtime = None
         self.__context = None
         self._as_parameter_ = None

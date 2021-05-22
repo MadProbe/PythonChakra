@@ -1,6 +1,7 @@
 import sys
-from simple_chalk import chalk
+
 from python_chakra import *
+from simple_chalk import chalk
 
 with JSRuntime() as (runtime, global_this):
     true = runtime.get_true()
@@ -8,33 +9,26 @@ with JSRuntime() as (runtime, global_this):
     console = Object(attach_to_global_as="console")
     console["WIP"] = true
 
-    @javascript_method()
+    @jsfunc(attach_to_global_as=("print", "writeln"), attach_to=console)
     def log(*args, **_):
         print(*map(js_value_to_string, args))
 
-    @javascript_method()
+    @jsfunc(attach_to=console)
     def warn(*args, **_):
         args = map(js_value_to_string, args)
         print(chalk.yellow("[WARN]"), *args)
 
-    @javascript_method()
+    @jsfunc(attach_to=console)
     def error(*args, **_):
         args = map(js_value_to_string, args)
         print(chalk.red("[ERROR]"), *args, file=sys.stderr)
 
-    @javascript_method()
-    def write_(*args, **_):
+    @jsfunc(attach_to_global_as=True)
+    def write(*args, **_):
         print(*map(js_value_to_string, args), end=None)
 
-    @javascript_method()
+    @jsfunc(attach_to_global_as=True)
     def count(a: JSValueRef = None, b: JSValueRef = None, **_):
         return Number(a) + Number(b)
-    global_this["writeln"] = create_function(log, "log",
-                                             attach_to_global_as="print",
-                                             attach_to=console)
-    create_function(warn, "warn", attach_to=console)
-    create_function(error, "error", attach_to=console)
-    create_function(write_, "write", attach_to_global_as=True)
-    create_function(count, "count", attach_to_global_as=True)
 
     runtime.exec_module("./examples/test.js")

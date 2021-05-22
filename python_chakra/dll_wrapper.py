@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 from ctypes import *
 from enum import IntEnum
-from functools import wraps
-from traceback import format_exception
 from typing import Iterable, List, Literal, Union
 
 from .utils import FIFOQueue, chakra_core
@@ -34,17 +32,17 @@ class PromiseFIFOQueue(FIFOQueue):
     def run(self, task):
         try:
             result = JSValueRef()
-            arguments = pointer(js_undefined)
-            self._ref.append(arguments)
+            args = pointer(js_undefined)
+            self._ref.append(args)
             # print(typeof(c_void_p(task)))
-            chakra_core.JsCallFunction(c_void_p(task),
-                                       arguments, 1, byref(result))
+            chakra_core.JsCallFunction(task, args, 1, byref(result))
+            self._ref.remove(args)
             # print("Done promise continuation callback")
         except Exception as ex:
             print("An error happed when executed",
                   "promise continuation callback:", ex, sep="\n")
         finally:
-            js_release(c_void_p(task))
+            js_release(task)
 
 
 nullptr = POINTER(c_int)()
@@ -112,64 +110,6 @@ def init_other_utilities():
     pointer(js_atomics)[0] = get_property(js_globalThis, "Atomics")
     pointer(js_bigint)[0] = get_property(js_globalThis, "BigInt")
     pointer(js_eval_function)[0] = get_property(js_globalThis, "eval")
-
-
-def javascript_method(constructor=False, fname=None):
-    def wrapper(function):
-        name = fname if fname is not None else function.__name__
-
-        @CFUNCTYPE(c_void_p, JSValueRef, c_bool,
-                   POINTER(POINTER(JSValueRef)),
-                   c_ushort, c_void_p)
-        @wraps(function)
-        def dummy(callee, new_call, args, arg_count, __user_data__):
-            if new_call and not constructor:
-                throw(create_type_error(f"{name} is not constructor"))
-            else:
-                try:
-                    if arg_count == 0:
-                        this = None
-                    else:
-                        this = args[0]
-                    r = function(*c_array_to_iterator(args, arg_count, 1),
-                                 this=this,
-                                 callee=callee,
-                                 new_call=bool(new_call))
-                    while r is not None and hasattr(r, "_as_parameter_"):
-                        r = r._as_parameter_
-                    if type(r) is JSValueRef:
-                        r = r.value
-                    return r
-                except Exception as ex:
-                    message = format_exception(type(ex), ex, ex.__traceback__)
-                    throw(create_error('\n'.join(message)))
-        return dummy
-    return wrapper
-
-
-def js_class(name=None, extends=None):
-    def wrapper(klass):
-        class Wrapper(klass):
-            def __init__(self):
-                self.__object = create_object()
-                self._as_parameter_ = self.__object
-                super().__init__(self.__object)
-
-            def __init_subclass__(cls):
-                @javascript_method(constructor=True, fname=name)
-                def dummy(*args):
-                    if cls.__class_extends is not None:
-                        call()
-                cls.__class_function = create_function()
-                cls.__class_prototype = create_object()
-                cls.__class_extends = None
-                if extends is not None:
-                    set_prototype(cls.__class_prototype,
-                                  get_prototype(extends))
-                    cls.__class_extends = extends
-                return super().__init_subclass__()
-        return Wrapper
-    return wrapper
 
 
 def str_to_js_string(string: str) -> JSValueRef:
@@ -249,10 +189,7 @@ def set_prototype(obj: JSValueRef, proto: JSValueRef) -> JSValueRef:
 
 
 def create_function(callback: c_func_type,
-                    name: Union[str, None] = None, *,
-                    attach_to_global_as: Union[str, bool, None] = None,
-                    attach_to_as: Union[str, None] = None,
-                    attach_to: Union[JSValueRef, None] = None) -> JSValueRef:
+                    name: Union[str, None] = None) -> JSValueRef:
     function = JSValueRef()
     p = byref(function)
     if name is None:
@@ -260,18 +197,6 @@ def create_function(callback: c_func_type,
     else:
         name_ = str_to_js_string(name)
         c = chakra_core.JsCreateNamedFunction(name_, callback, 0, p)
-    if attach_to_global_as:
-        if attach_to_global_as is True:
-            if name is None:
-                raise TypeError
-            attach_to_global_as = name
-        set_property(js_globalThis, attach_to_global_as, function)
-    if attach_to:
-        if not attach_to_as:
-            if name is None:
-                raise TypeError
-            attach_to_as = name
-        set_property(attach_to, attach_to_as, function)
     assert c == 0, descriptive_message(c, "create_function")
     return function
 
