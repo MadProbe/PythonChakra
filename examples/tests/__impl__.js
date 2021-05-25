@@ -18,4 +18,22 @@ export const assert = (condition, error) => {
     if (!condition) {
         throw new AssertionError(error);
     }
-}
+};
+
+export const assertNot = (condition, error) => {
+    if (condition) {
+        throw new AssertionError(error);
+    }
+};
+
+/**
+ * 
+ * @param {any} value 
+ * @param {"string" | "number" | "bigint" | "boolean" | "symbol" | "undefined" | "object" | "function"} type 
+ * @param {any} error 
+ */
+export const assertType = (value, type, error) => {
+    if (typeof value !== type) {
+        throw new AssertionError(error);
+    }
+};
