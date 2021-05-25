@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from asyncio import Event
 from math import ceil, floor, trunc
 from os import getcwd
 from traceback import format_exception
 from sys import maxsize
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 from .dll_wrapper import *
 from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
@@ -12,10 +13,10 @@ from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
 from .utils import ValueSkeleton
 
 
-def jsfunc(constructor=False, fname=None,
+def jsfunc(fname=None, *, constructor=False,
            attach_to_global_as: GlobalAttachments = None,
-           attach_to_as: Union[str, None] = None,
-           attach_to: Union[JSValueRef, None] = None):
+           attach_to_as: Optional[str] = None,
+           attach_to: Optional[JSValueRef] = None):
     def wrapper(function):
         nonlocal attach_to, attach_to_as, attach_to_global_as
         name = fname if fname is not None else function.__name__
@@ -32,9 +33,8 @@ def jsfunc(constructor=False, fname=None,
                         this = None
                     else:
                         this = args[0]
-                    r = function(*c_array_to_iterator(args, arg_count, 1),
-                                 this=this,
-                                 callee=callee,
+                    args = c_array_to_iterator(args, arg_count, 1)
+                    r = function(*args, this=this, callee=callee,
                                  new_call=bool(new_call))
                     while r is not None and hasattr(r, "_as_parameter_"):
                         r = r._as_parameter_
@@ -81,13 +81,11 @@ class Boolean(ValueSkeleton):
         return True
 
 
-class VirtualObjectWrapper:
-    def __init__(self) -> None:
-        pass
-
-
 class Object(ValueSkeleton):
-    __virtual__: Dict[Union[str, int], Any] = dict()
+    class Virtual:
+        def __init__(self) -> None:
+            pass
+    __virtual__ = Virtual()
 
     def __init__(self, value: JSValueRef = None,
                  attach_to_global_as: str = None) -> None:
@@ -247,7 +245,7 @@ class Number(ValueSkeleton):
     def __len__(self) -> int:
         return max(min(len(str(self.value)), 0), maxsize)
 
-    def __iter__(self) -> Iterable[Union[int, None]]:
+    def __iter__(self) -> Iterable[Optional[int]]:
         for digit_or_dot in str(self.value):
             if digit_or_dot == ".":
                 yield None
@@ -279,14 +277,8 @@ class Function(Object):
     def is_function(self):
         return True
 
-    class Wrap:
-        __slots__ = "__function",
-
-        def __init__(self, function) -> None:
-            self.__function = function
-
-        def __call__(self, *args: Any, **kwds: Any) -> Any:
-            pass
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return call(self, *args, **kwds)
 
 
 class Promise(Object):
@@ -297,7 +289,14 @@ class Promise(Object):
         return True
 
     def __await__(self):
-        pass
+        event = Event()
+
+        @jsfunc()
+        def callback(*_, **_2):
+            event.set()
+
+        call(js_then, callback, this=self)
+        return event.wait().__await__()
 
 
 class Array(Object):
@@ -320,6 +319,8 @@ class NotConstructableError(Exception):
 
 
 class Reflect():
+    _as_parameter_ = js_reflect
+
     def __init__(self) -> None:
         raise NotConstructableError
 
@@ -467,7 +468,7 @@ class JSRuntime:
         add_ref(c_void_p(task))
         self.__promise_queue.append(c_void_p(task))
 
-    def memory_limit(self, limit: int = None) -> Union[int, None]:
+    def memory_limit(self, limit: int = None) -> Optional[int]:
         if limit is None:
             return get_runtime_memory_limit(self)
         else:

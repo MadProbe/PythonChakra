@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from os import getcwd, name
 from typing import *
 
@@ -7,23 +9,6 @@ from whatwg_url import is_valid_url, parse_url
 
 from .utils import cookies, FIFOQueue
 from .dll_wrapper import *
-
-
-# Forwards
-class JavaScriptModule:
-    pass
-
-
-class ModuleFIFOQueue:
-    pass
-
-
-_DefaultPathResolverFunction = Callable[[None, str, str], URL]
-PathResolverFunctionType = Callable[[_DefaultPathResolverFunction,
-                                     str, str], URL]
-_DefaultLoaderFunctionType = Callable[[None, str], URL]
-LoaderFunctionType = Callable[[_DefaultLoaderFunctionType, str], URL]
-ModuleOrNone = Union[JavaScriptModule, None]
 
 
 class JavaScriptModule:
@@ -142,7 +127,7 @@ class ModuleRuntime:
                 if module._as_parameter_.value == pointer.value:
                     return module
 
-    def on_module_fetch(self, importer: Union[c_void_p, None],
+    def on_module_fetch(self, importer: Optional[c_void_p],
                         specifier: JSValueRef,
                         module_record_p: POINTER(c_void_p)):
         # print(type(module_record_p))
@@ -166,7 +151,7 @@ class ModuleRuntime:
         module_record_p[0] = module.module.value
 
     def on_module_ready(self, module: ModuleOrNone,
-                        exception: Union[JSValueRef, None]):
+                        exception: Optional[JSValueRef]):
         if module is not None:
             if exception is None:
                 module.eval()
@@ -207,3 +192,11 @@ class ModuleRuntime:
         set_import_meta_callback(import_meta_callback_wrapped)
         set_module_notify_callback(dummy3)
         set_module_ready_callback(dummy4)
+
+
+_DefaultPathResolverFunction = Callable[[None, str, str], URL]
+PathResolverFunctionType = Callable[[_DefaultPathResolverFunction,
+                                     str, str], URL]
+_DefaultLoaderFunctionType = Callable[[None, str], URL]
+LoaderFunctionType = Callable[[_DefaultLoaderFunctionType, str], URL]
+ModuleOrNone = Optional[JavaScriptModule]

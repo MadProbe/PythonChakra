@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from weakref import WeakValueDictionary
 from ctypes import *
 from enum import IntEnum
-from typing import Iterable, List, Literal, Union
+from typing import Dict, Iterable, List, Literal, Optional, Union
 
 from .utils import FIFOQueue, chakra_core
 
@@ -24,6 +25,70 @@ class ErrorCodesEnum(IntEnum):
     ErrorHeapEnumInProgress = 0x1000b
     ErrorArgumentNotObject = 0x1000c
     ErrorInProfileCallback = 0x1000d
+
+
+class Fridge:
+    """
+    A frozen container for global objects
+    """
+    class __Dict(dict):
+        def __missing__(self, *_):
+            raise ValueError
+
+    class __ObjectEntry:
+        value: JSValueRef
+        descendants: Dict[str, Fridge.__ObjectEntry]
+
+        def __init__(self, value, descendants) -> None:
+            self.value = value
+            self.descendants = descendants
+
+    __this: __ObjectEntry
+    __current: __ObjectEntry
+
+    def __class_getitem__(cls, name):
+        cls.__current = cls.__current.descendants[name]
+        return cls
+
+    def __new__(cls) -> JSValueRef:
+        current = cls.__current.value
+        cls.__current = cls.__this
+        return current
+
+    @classmethod
+    def scan(cls):
+        weak_dict = WeakValueDictionary()
+        F = js_eval("Object.getOwnPropertyNames")
+
+        def _rec(obj: JSValueRef):
+            def add(value):
+                if typeof(value) not in (js_types["object"],
+                                         js_types["function"]):
+                    return
+                if value.value in weak_dict:
+                    entry = weak_dict.get(value.value)
+                else:
+                    _dict = Fridge.__Dict()
+                    entry = Fridge.__ObjectEntry(value, _dict)
+                    weak_dict[value.value] = entry
+                    _dict.update(_rec(value).descendants)
+                dict[name] = entry
+            dict = Fridge.__Dict()
+            res = Fridge.__ObjectEntry(obj, dict)
+            weak_dict[obj.value] = res
+            names = call(F, obj)
+            length = to_double(get_property(names, "length"))
+            for i in range(int(length)):
+                name = get_property(names, i)
+                name = js_value_to_string(name)
+                try:
+                    value: JSValueRef = get_property(obj, name)
+                    add(value)
+                except AssertionError:
+                    get_exception()
+            return res
+
+        cls.__this = cls.__current = _rec(js_globalThis)
 
 
 class PromiseFIFOQueue(FIFOQueue):
@@ -78,8 +143,8 @@ __callback_refs = []
 
 
 def descriptive_message(code: str, method: str) -> str:
-    return f"While evaluation of {method} method, \
-ChakraCore returned errornous {hex(code)} code!"
+    return f"While evaluation of {method} method, " + \
+           f"ChakraCore returned errornous {hex(code)} code!"
 
 
 js_globalThis: JSValueRef = JSValueRef()
@@ -93,6 +158,8 @@ js_bigint: JSValueRef = JSValueRef()
 js_eval_function: JSValueRef = JSValueRef()
 js_error: JSValueRef = JSValueRef()
 js_error_prototype: JSValueRef = JSValueRef()
+js_then: JSValueRef = JSValueRef()
+js_reflect: JSValueRef = JSValueRef()
 
 
 def init_utilitites():
@@ -110,6 +177,8 @@ def init_other_utilities():
     pointer(js_atomics)[0] = get_property(js_globalThis, "Atomics")
     pointer(js_bigint)[0] = get_property(js_globalThis, "BigInt")
     pointer(js_eval_function)[0] = get_property(js_globalThis, "eval")
+    Fridge.scan()
+    pointer(js_reflect)[0] = Fridge["Reflect"]()
 
 
 def str_to_js_string(string: str) -> JSValueRef:
@@ -189,7 +258,7 @@ def set_prototype(obj: JSValueRef, proto: JSValueRef) -> JSValueRef:
 
 
 def create_function(callback: c_func_type,
-                    name: Union[str, None] = None) -> JSValueRef:
+                    name: Optional[str] = None) -> JSValueRef:
     function = JSValueRef()
     p = byref(function)
     if name is None:
@@ -215,9 +284,9 @@ def create_type_error(message: str) -> JSValueRef:
     return error
 
 
-def call(f: JSValueRef, *args, this_arg: JSValueRef = None):
+def call(f: JSValueRef, *args, this: JSValueRef = None):
     _l = len(args) + 1
-    a = (JSValueRef * _l)(this_arg or js_undefined, *args)
+    a = (JSValueRef * _l)(this or js_undefined, *args)
     result = JSValueRef()
     c = chakra_core.JsCallFunction(f, a, _l, byref(result))
     assert c == 0, descriptive_message(c, "call")
@@ -275,6 +344,13 @@ def js_eval(code):
     if js_eval_function is None:
         js_eval_function = get_property(js_globalThis, "eval")
     return call(js_eval_function, str_to_js_string(code))
+
+
+def to_object(value: JSValueRef):
+    object = JSValueRef()
+    c = chakra_core.JsConvertValueToObject(value, byref(object))
+    assert c == 0, descriptive_message(c, "to_object")
+    return object
 
 
 def to_number(value: _NumberLike) -> JSValueRef:
@@ -401,15 +477,19 @@ def set_module_notify_callback(callback, module=0):
 
 def is_callable(value: JSValueRef) -> bool:
     result = c_bool()
-    c = chakra_core.IsCallable(value, byref(result))
+    c = chakra_core.JsIsCallable(value, byref(result))
+    if c == 0x1000c:
+        return False
     assert c == 0, descriptive_message(c, "is_callable")
     return bool(result)
 
 
 def is_constructor(value: JSValueRef) -> bool:
     result = c_bool()
-    c = chakra_core.IsConstructor(value, byref(result))
-    assert c == 0, descriptive_message(c, "is_callable")
+    c = chakra_core.JsIsConstructor(value, byref(result))
+    if c == 0x1000c:
+        return False
+    assert c == 0, descriptive_message(c, "is_constructor")
     return bool(result)
 
 
@@ -463,6 +543,9 @@ def create_context(runtime: c_void_p):
 def get_exception():
     ex = c_void_p()
     c = chakra_core.JsGetAndClearException(byref(ex))
+    if c == 0x10001:
+        print("no-error")
+        return None
     assert c == 0, descriptive_message(c, "get_exception")
     return ex
 
