@@ -49,6 +49,8 @@ def jsfunc(fname=None, *, constructor=False,
                             r = js_false
                         if type(r) is str:
                             r = str_to_js_string(r)
+                        if type(r) in (int, float):
+                            r = to_double(r)
                     if type(r) is JSValueRef:
                         r = r.value
                     return r
