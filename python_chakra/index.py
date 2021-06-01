@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from asyncio import Event
+from collections import UserString
+from collections.abc import MutableSequence
 from math import ceil, floor, trunc
+from numbers import Number as _Number
 from os import getcwd
-from traceback import format_exception
 from sys import maxsize
-from typing import Any, Optional, Tuple, Union
+from traceback import format_exception
+from typing import Any, Awaitable, Optional, Tuple, Union
 
 from .dll_wrapper import *
 from .modules import (JavaScriptModule, ModuleRuntime, default_loader,
@@ -16,7 +19,8 @@ from .utils import ValueSkeleton
 def jsfunc(fname=None, *, constructor=False,
            attach_to_global_as: GlobalAttachments = None,
            attach_to_as: Optional[str] = None,
-           attach_to: Optional[JSValueRef] = None):
+           attach_to: Optional[JSValueRef] = None,
+           wrap_returns: Optional[bool] = True):
     def wrapper(function):
         nonlocal attach_to, attach_to_as, attach_to_global_as
         name = fname if fname is not None else function.__name__
@@ -38,6 +42,13 @@ def jsfunc(fname=None, *, constructor=False,
                                  new_call=bool(new_call))
                     while r is not None and hasattr(r, "_as_parameter_"):
                         r = r._as_parameter_
+                    if wrap_returns:
+                        if r is True:
+                            r = js_true
+                        if r is False:
+                            r = js_false
+                        if type(r) is str:
+                            r = str_to_js_string(r)
                     if type(r) is JSValueRef:
                         r = r.value
                     return r
@@ -116,7 +127,7 @@ class Object(ValueSkeleton):
         return True
 
 
-class Number(ValueSkeleton):
+class Number(ValueSkeleton, _Number):
     __slots__ = "_as_parameter_", "value"
     _as_parameter_: JSValueRef
     value: float
@@ -265,9 +276,18 @@ class Number(ValueSkeleton):
         return round(self.value, ndigits)
 
 
-class String(ValueSkeleton):
-    def __init__(self) -> None:
-        pass
+class String(ValueSkeleton, UserString):
+    data: str
+    _as_parameter_: JSValueRef
+    __slots__ = "data", "_as_parameter_"
+
+    def __init__(self, seq) -> None:
+        if type(seq) is POINTER(JSValueRef):
+            seq = seq[0]
+        if type(seq) is JSValueRef:
+            seq = js_value_to_string(seq)
+        super().__init__(seq)
+        self._as_parameter_ = str_to_js_string(self.data)
 
 
 class Function(Object):
@@ -281,25 +301,35 @@ class Function(Object):
         return call(self, *args, **kwds)
 
 
-class Promise(Object):
-    def __init__(self) -> None:
-        pass
+class Promise(Object, Awaitable):
+    def __init__(self, F) -> None:
+        promise, resolve, reject = create_promise()
+        super().__init__(promise)
+        F(resolve, reject)
 
     def is_promise(self):
         return True
 
-    def __await__(self):
+    async def __wait__(self):
         event = Event()
+        value = None
 
         @jsfunc()
-        def callback(*_, **_2):
+        def callback(val, **_2):
+            nonlocal value
             event.set()
+            value = val
 
-        call(js_then, callback, this=self)
-        return event.wait().__await__()
+        call(Fridge["Promise"]["prototype"]["then"](), callback, this=self)
+        await event.wait()
+
+        return value
+
+    def __await__(self):
+        return self.__wait__().__await__()
 
 
-class Array(Object):
+class Array(Object, MutableSequence):
     def __init__(self) -> None:
         pass
 

@@ -31,5 +31,5 @@ try {
 }
 // ;
 
-await import("./tests/Reflect/is_callable.js");
+await import("./tests/__all__.js");
 

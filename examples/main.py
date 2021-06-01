@@ -9,7 +9,6 @@ print("Start")
 
 with JSRuntime() as (runtime, global_this):
     true = runtime.get_true()
-    false = runtime.get_false()
     global_this["__from_wrapper__"] = true
     console = Object(attach_to_global_as="console")
     console["WIP"] = true
@@ -38,12 +37,10 @@ with JSRuntime() as (runtime, global_this):
 
     @jsfunc(attach_to=Reflect)
     def isCallable(value: JSValueRef = None, *_, **_2):
-        return true if value is not None and \
-            Reflect.is_callable(value) else false
+        return value is not None and Reflect.is_callable(value)
 
     @jsfunc(attach_to=Reflect)
     def isConstructor(value: JSValueRef = None, *_, **_2):
-        return true if value is not None and \
-            Reflect.is_constructor(value) else false
+        return value is not None and Reflect.is_constructor(value)
 
-    runtime.exec_module("./examples/test.js")
+    runtime.exec_module("./examples/tests/__all__.js")
