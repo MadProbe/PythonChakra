@@ -117,21 +117,16 @@ class ModuleRuntime:
     def get_module(self, specifier: str) -> Optional[JSModule]:
         return self.modules.get(specifier)
 
-    def get_module_by_pointer(self, pointer: JSRef) -> Optional[JSModule]:
-        if pointer is None:
+    def get_module_by_pointer(self, ref: JSModuleRecord) -> Optional[JSModule]:
+        if ref is None:
             return None
-        if type(pointer) is int:
-            for module in self.modules.values():
-                if module._as_parameter_.value == pointer:
-                    return module
-        else:
-            for module in self.modules.values():
-                if module._as_parameter_.value == pointer.value:
-                    return module
+        for module in self.modules.values():
+            if module._as_parameter_.value == ref.value:
+                return module
 
-    def on_module_fetch(self, importer: Optional[JSRef],
+    def on_module_fetch(self, importer: Optional[JSModuleRecord],
                         specifier: JSValueRef,
-                        module_record_p: POINTER(JSRef)):
+                        module_record_p: POINTER(JSModuleRecord)):
         spec = js_value_to_string(specifier)
         parent_module = self.get_module_by_pointer(importer)
         pathbase = parse_url("file:///" + getcwd())
@@ -159,32 +154,31 @@ class ModuleRuntime:
                 print(js_value_to_string(c_void_p(exception)))
 
     def attach_callcacks(self):
-        @CFUNCTYPE(c_int, JSRef, JSValueRef, POINTER(c_void_p))
+        @CFUNCTYPE(c_int, JSModuleRecord, JSValueRef, POINTER(JSModuleRecord))
         def dummy1(ref_module, specifier, module_record):
-            self.on_module_fetch(c_void_p(ref_module),
-                                 c_void_p(specifier),
+            self.on_module_fetch(JSModuleRecord(ref_module),
+                                 JSValueRef(specifier),
                                  module_record)
             return 0
 
         @CFUNCTYPE(c_int, c_void_p, JSValueRef, POINTER(JSRef))
         def dummy2(_, specifier, module_record):
             # just ignore the source context variable
-            self.on_module_fetch(None, c_void_p(specifier), module_record)
-            return 0
+            self.on_module_fetch(None, JSValueRef(specifier), module_record)
 
         def dummy3(ref_module, ex):
-            # print("dummy3")
-            module = self.get_module_by_pointer(ref_module)
-            module is not None and self.on_module_ready(module, ex)
-            return 0
+            module = self.get_module_by_pointer(JSModuleRecord(ref_module))
+            if module is not None:
+                self.on_module_ready(module, ex)
 
         def dummy4(ref_module, ex):
             pass
 
-        @CFUNCTYPE(c_int, JSRef, JSValueRef)
+        @CFUNCTYPE(c_int, JSModuleRecord, JSValueRef)
         def import_meta_callback_wrapped(module, object):
-            module = self.get_module_by_pointer(c_void_p(module))
-            default_import_meta_callback(module, c_void_p(object))
+            module = JSModuleRecord(module)
+            module = self.get_module_by_pointer(module)
+            default_import_meta_callback(module, JSValueRef(object))
             return 0
         set_fetch_importing_module_callback(dummy1)
         set_fetch_importing_module_from_script_callback(dummy2)

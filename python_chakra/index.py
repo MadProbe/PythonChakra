@@ -195,7 +195,8 @@ def jsfunc(fname=None, *, constructor=False,
                         r = r.value
                     return r
                 except Exception as ex:
-                    message = format_exception(type(ex), ex, ex.__traceback__)
+                    message = format_exception(type(ex), ex,
+                                               ex.__traceback__)
                     throw(create_error('\n'.join(message)))
 
         _frefs.append(dummy)

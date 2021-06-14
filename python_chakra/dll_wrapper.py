@@ -519,19 +519,19 @@ def set_exception(record, ex):
     assert c == 0, descriptive_message(c, "set_exception")
 
 
-def set_fetch_importing_module_callback(callback, module=0):
+def set_fetch_importing_module_callback(callback):
     _n = "set_fetch_importing_module_callback"
     callback = cast(callback, c_void_p)
     __callback_refs.append(callback)
-    c = chakra_core.JsSetModuleHostInfo(module, 4, callback)
+    c = chakra_core.JsSetModuleHostInfo(None, 4, callback)
     assert c == 0, descriptive_message(c, _n)
 
 
-def set_fetch_importing_module_from_script_callback(callback, module=0):
+def set_fetch_importing_module_from_script_callback(callback):
     _n = "set_fetch_importing_module_from_script_callback"
     callback = cast(callback, c_void_p)
     __callback_refs.append(callback)
-    c = chakra_core.JsSetModuleHostInfo(module, 5, callback)
+    c = chakra_core.JsSetModuleHostInfo(None, 5, callback)
     assert c == 0, descriptive_message(c, _n)
 
 
@@ -542,30 +542,30 @@ def set_url(record, url):
     assert c == 0, descriptive_message(c, "set_url")
 
 
-def set_import_meta_callback(callback, module=0):
+def set_import_meta_callback(callback):
     __callback_refs.append(callback)
-    c = chakra_core.JsSetModuleHostInfo(module, 7, callback)
+    c = chakra_core.JsSetModuleHostInfo(None, 7, callback)
     assert c == 0, descriptive_message(c, "set_import_meta_callback")
 
 
-def set_module_ready_callback(callback, module=0):
+def set_module_ready_callback(callback):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy(module, ex):
         callback(module, ex)
         return 0
     __callback_refs.append(dummy)
-    c = chakra_core.JsSetModuleHostInfo(module, 8, dummy)
+    c = chakra_core.JsSetModuleHostInfo(None, 8, dummy)
     assert c == 0, descriptive_message(c, "set_module_ready_callback")
 
 
-def set_module_notify_callback(callback, module=0):
+def set_module_notify_callback(callback):
     @CFUNCTYPE(c_int, c_void_p, c_void_p)
     def dummy(module, ex):
         # print("calling dummy6")
         callback(module, ex)
         return 0
     __callback_refs.append(dummy)
-    c = chakra_core.JsSetModuleHostInfo(module, 3, dummy)
+    c = chakra_core.JsSetModuleHostInfo(None, 3, dummy)
     assert c == 0, descriptive_message(c, "set_module_notify_callback")
 
 
@@ -587,7 +587,7 @@ def is_constructor(value: JSValueRef) -> bool:
     return bool(result)
 
 
-def parse_module_source(record: c_void_p,
+def parse_module_source(record: JSModuleRecord,
                         context_count: int,
                         script: c_char_p,
                         flags: int = 0) -> JSValueRef:
@@ -602,7 +602,7 @@ def parse_module_source(record: c_void_p,
     return ex
 
 
-def init_module_record(ref_module, url: POINTER(c_byte)) -> JSRef:
+def init_module_record(ref_module, url: POINTER(c_byte)) -> JSModuleRecord:
     record = JSValueRef()
     c = chakra_core.JsInitializeModuleRecord(ref_module,
                                              url,
