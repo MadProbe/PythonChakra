@@ -48,7 +48,7 @@ class JavaScriptModule:
 
     def eval(self):
         # print(f"Module {self.fullpath} is getting run!")
-        run_module(self.module)
+        run_module(self)
         self.__promise_queue.exec()
 
     def dispose(self):
@@ -95,6 +95,7 @@ class ModuleFIFOQueue(FIFOQueue):
 
 
 class ModuleRuntime:
+    modules: Dict[str, JavaScriptModule]
     __slots__ = "__promise_queue", "modules", \
                 "path_resolver", "loader", "runtime", "queue"
 

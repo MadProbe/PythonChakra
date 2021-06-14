@@ -1,12 +1,35 @@
 from __future__ import annotations
 
 import re
-from weakref import WeakValueDictionary
+from abc import abstractmethod
 from ctypes import *
 from enum import IntEnum
-from typing import Dict, Iterable, List, Literal, Optional, Union
+from typing import Any, Dict, Iterable, List, Literal, Optional, Protocol, \
+    Union, runtime_checkable
 
 from .utils import FIFOQueue, chakra_core
+
+
+def walk_asparam_chain(r) -> JSValueRef:
+    while r is not None and hasattr(r, "_as_parameter_"):
+        r = r._as_parameter_
+    return r
+
+
+@runtime_checkable
+class SupportsLazyInit(Protocol):
+    @abstractmethod
+    def __lazy_init__() -> None:
+        pass
+
+
+class _LazyInitQueue(FIFOQueue[SupportsLazyInit]):
+    def run(self, object: SupportsLazyInit) -> None:
+        object.__lazy_init__()
+
+
+vi_function_queue = _LazyInitQueue()
+vi_object_queue = _LazyInitQueue()
 
 
 class ErrorCodesEnum(IntEnum):
@@ -31,33 +54,78 @@ class Fridge:
     """
     A frozen container for global objects
     """
-    class __Dict(dict):
+    class __Dict__(dict):
         def __missing__(self, *_):
             raise ValueError
 
-    class __ObjectEntry:
+    class __ObjectEntry__:
         value: JSValueRef
-        descendants: Dict[str, Fridge.__ObjectEntry]
+        descendants: Dict[str, Fridge.__ObjectEntry__]
+        __slots__ = "value", "descendants"
 
         def __init__(self, value, descendants) -> None:
             self.value = value
             self.descendants = descendants
 
-    __this: __ObjectEntry
-    __current: __ObjectEntry
+    class __Lazy__(SupportsLazyInit):
+        __store__: List[str]
+        __pointer__: JSValueRef
+        __slots__ = "__store__", "__pointer__"
+
+        def __init__(self) -> None:
+            self.__store__ = []
+
+        def __getitem__(self, name) -> None:
+            self.__store__.append(name)
+
+        def __call__(self) -> Any:
+            p = self.__pointer__ = JSValueRef()
+            return p
+
+        def __lazy_init__(self) -> None:
+            for propname in self.__store__:
+                Fridge[propname]
+            if hasattr(self, "__pointer__"):
+                self.__pointer__.value = Fridge().value
+            else:
+                raise UserWarning("When initializing value of built-in JS \
+value, __pointer__ property was undefined. Did you forget to call Fridge \
+class?")
+            return self
+
+    __this: __ObjectEntry__
+    __current: __ObjectEntry__
+    __initialized: bool = False
+    __lazily_inited: List[__Lazy__] = []
+    __current_lazy = __Lazy__()
 
     def __class_getitem__(cls, name):
-        cls.__current = cls.__current.descendants[name]
+        if cls.__initialized:
+            cls.__current = cls.__current.descendants[name]
+        else:
+            cls.__current_lazy[name]
         return cls
 
     def __new__(cls) -> JSValueRef:
-        current = cls.__current.value
-        cls.__current = cls.__this
+        if cls.__initialized:
+            current = cls.__current.value
+            cls.__current = cls.__this
+        else:
+            cls.__lazily_inited.append(cls.__current_lazy)
+            current = cls.__current_lazy()
+            cls.__current_lazy = Fridge.__Lazy__()
         return current
 
     @classmethod
+    def __lazy_init__(cls):
+        cls.scan()
+        cls.__initialized = True
+        for _lazily_inited in cls.__lazily_inited:
+            _lazily_inited.__lazy_init__()
+
+    @classmethod
     def scan(cls):
-        weak_dict = WeakValueDictionary()
+        d = dict()
         F = js_eval("Object.getOwnPropertyNames")
 
         def _rec(obj: JSValueRef):
@@ -65,17 +133,17 @@ class Fridge:
                 if typeof(value) not in (js_types["object"],
                                          js_types["function"]):
                     return
-                if value.value in weak_dict:
-                    entry = weak_dict.get(value.value)
+                if value.value in d:
+                    entry = d.get(value.value)
                 else:
-                    _dict = Fridge.__Dict()
-                    entry = Fridge.__ObjectEntry(value, _dict)
-                    weak_dict[value.value] = entry
+                    _dict = Fridge.__Dict__()
+                    entry = Fridge.__ObjectEntry__(value, _dict)
+                    d[value.value] = entry
                     _dict.update(_rec(value).descendants)
                 dict[name] = entry
-            dict = Fridge.__Dict()
-            res = Fridge.__ObjectEntry(obj, dict)
-            weak_dict[obj.value] = res
+            dict = Fridge.__Dict__()
+            res = Fridge.__ObjectEntry__(obj, dict)
+            d[obj.value] = res
             names = call(F, obj)
             length = to_double(get_property(names, "length"))
             for i in range(int(length)):
@@ -99,10 +167,8 @@ class PromiseFIFOQueue(FIFOQueue):
             result = JSValueRef()
             args = pointer(js_undefined)
             self._ref.append(args)
-            # print(typeof(c_void_p(task)))
             chakra_core.JsCallFunction(task, args, 1, byref(result))
             self._ref.remove(args)
-            # print("Done promise continuation callback")
         except Exception as ex:
             print("An error happed when executed",
                   "promise continuation callback:", ex, sep="\n")
@@ -148,6 +214,7 @@ def descriptive_message(code: str, method: str) -> str:
 
 
 js_globalThis: JSValueRef = JSValueRef()
+initial_val = js_globalThis.value
 js_undefined: JSValueRef = JSValueRef()
 js_null: JSValueRef = JSValueRef()
 js_true: JSValueRef = JSValueRef()
@@ -177,8 +244,8 @@ def init_other_utilities():
     pointer(js_atomics)[0] = get_property(js_globalThis, "Atomics")
     pointer(js_bigint)[0] = get_property(js_globalThis, "BigInt")
     pointer(js_eval_function)[0] = get_property(js_globalThis, "eval")
-    Fridge.scan()
-    pointer(js_reflect)[0] = Fridge["Reflect"]()
+    vi_function_queue.exec()
+    vi_object_queue.exec()
 
 
 def str_to_js_string(string: str) -> JSValueRef:
@@ -222,7 +289,7 @@ def to_array(arr: list):
 def create_object(properties: dict = None) -> JSValueRef:
     obj = JSValueRef()
     c = chakra_core.JsCreateObject(byref(obj))
-    assert c == 0, c
+    assert c == 0, descriptive_message(c, "create_object")
     if properties is not None:
         for prop, item in properties.items():
             set_property(obj, prop, item)
@@ -284,9 +351,10 @@ def create_type_error(message: str) -> JSValueRef:
     return error
 
 
-def call(f: JSValueRef, *args, this: JSValueRef = None):
+def call(f: JSValueRef, *args, this: JSValueRef = js_undefined):
     _l = len(args) + 1
-    a = (JSValueRef * _l)(this or js_undefined, *args)
+    a = (JSValueRef * _l)(walk_asparam_chain(this),
+                          *map(walk_asparam_chain, args))
     result = JSValueRef()
     c = chakra_core.JsCallFunction(f, a, _l, byref(result))
     assert c == 0, descriptive_message(c, "call")
@@ -392,6 +460,31 @@ def typeof(value: JSValueRef) -> int:
 def throw(error: JSValueRef) -> None:
     c = chakra_core.JsSetException(error)
     assert c == 0, descriptive_message(c, "throw")
+
+
+def create_promise():
+    promise = JSValueRef()
+    resolve = JSValueRef()
+    reject = JSValueRef()
+    c = chakra_core.JsCreatePromise(byref(promise),
+                                    byref(resolve),
+                                    byref(reject))
+    assert c == 0, descriptive_message(c, "create_promise")
+    return promise, resolve, reject
+
+
+def get_promise_result(value: JSValueRef) -> JSValueRef:
+    r = JSValueRef()
+    c = chakra_core.JsGetPromiseResult(value, byref(r))
+    assert c == 0, descriptive_message(c, "get_promise_result")
+    return r
+
+
+def get_promise_state(value: JSValueRef) -> int:
+    state = c_int()
+    c = chakra_core.JsGetPromiseState(value, byref(state))
+    assert c == 0, descriptive_message(c, "get_promise_state")
+    return state.value
 
 
 def inspect(value: JSValueRef, indent="\t") -> str:

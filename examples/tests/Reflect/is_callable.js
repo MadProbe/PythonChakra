@@ -1,4 +1,4 @@
-import { assert, assertNot, assertType, Tests } from "../__impl__.js"
+import { assert, assertNot, assertType, Tests } from "../__impl__.js";
 
 const name = "Reflect.isCallable";
 Tests.run(name, {
