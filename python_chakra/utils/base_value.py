@@ -1,4 +1,4 @@
-class ValueSkeleton:
+class BaseValue:
     def is_boolean(self):
         return False
 

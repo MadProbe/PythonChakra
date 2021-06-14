@@ -11,17 +11,20 @@ from os import getcwd
 from sys import maxsize
 from traceback import format_exception
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, Generator, \
-    Optional, Tuple, Union, overload
+    Optional, Tuple, TypeVar, Union, overload
 
 from .dll_wrapper import *
-from .modules import JavaScriptModule, ModuleRuntime, default_loader, \
+from .modules import JSModule, ModuleRuntime, default_loader, \
     default_path_resolver
-from .utils import ValueSkeleton
+from .utils import BaseValue
 
 
-class Boolean(ValueSkeleton):
-    _as_parameter_: JSValueRef
-    __slots__ = "_as_parameter_",
+_T = TypeVar("_T")
+
+
+class Boolean(BaseValue):
+    _as_parameter_ = Fridge["Boolean"]()
+    __slots__ = ()
 
     def __init__(self, value: JSValueRef) -> None:
         self._as_parameter_ = value
@@ -30,58 +33,81 @@ class Boolean(ValueSkeleton):
         return True
 
 
-class Object(ValueSkeleton, SupportsLazyInit):
-    class __Virtual__:
-        __properties = dict()
+class Object(BaseValue, SupportsLazyInit):
+    class __PropDesc__:
+        value: Optional[JSValueRef]
+        get: Optional[JSValueRef]
+        set: Optional[JSValueRef]
+        writable: bool
+        enumerable: bool
+        configurable: bool
+        __slots__ = "value", "get", "set", "writable", "enumerable", \
+            "configurable"
+
+        def __init__(self, value: JSValueRef, get: JSValueRef = None,
+                     set: JSValueRef = None, writable: bool = True,
+                     enumerable: bool = True,
+                     configurable: bool = True) -> None:
+            self.value = value
+            self.get = get
+            self.set = set
+            self.writable = writable
+            self.configurable = configurable
+            self.enumerable = enumerable
+
+    class __Lazy__:
+        __properties: Dict[Union[str, int], Object.__PropDesc__]
         _attach_to_global_as: str
+        __slots__ = "__properties", "_attach_to_global_as"
 
         def __init__(self, _) -> None:
+            self.__properties = dict()
             self._attach_to_global_as = _
 
-        def define_property(self, name, value, get, set, writable,
-                            enumerable, configurable) -> None:
-            self.__properties[name] = dict(value=value, get=get, set=set,
-                                           writable=writable,
-                                           enumerable=enumerable,
-                                           configurable=configurable)
+        def define_property(self, name: str, value: JSValueRef,
+                            get: JSValueRef = None, set: JSValueRef = None,
+                            writable: bool = True, enumerable: bool = True,
+                            configurable: bool = True) -> None:
+            desc = Object.__PropDesc__(value, get, set, writable,
+                                       enumerable, configurable)
+            self.__properties[name] = desc
 
-        def delete_property(self, name):
+        def delete_property(self, name) -> None:
             del self.__properties[name]
 
-        def __setitem__(self, name, value):
+        def __setitem__(self, name, value) -> None:
             if name in self.__properties.keys():
                 if self.__properties[name].writable:
-                    self.__properties[name]["value"] = value
+                    self.__properties[name].value = value
                 else:
                     raise
             else:
                 self.define_property(name, value, None, None, True, True, True)
 
-        def __getitem__(self, name):
-            return self.__properties[name]
+        def __getitem__(self, name) -> Any:
+            return self.__properties[name].value
 
-        def __delitem__(self, name):
+        def __delitem__(self, name) -> None:
             self.delete_property(name)
 
         def __iter__(self) -> Generator[Tuple[Union[str, int],
-                                        Dict[str, Any]], None, None]:
+                                        Object.__PropDesc__], None, None]:
             return zip(self.__properties.keys(),
                        self.__properties.values())
 
-    __virtual__: __Virtual__
-    __initialized__: bool = False
-    _as_parameter_: JSValueRef
-    # __slots__ = "__virtual__", "_as_parameter_"
+    __lazy__: __Lazy__
+    __initialized__: bool
+    _as_parameter_: JSValueRef = Fridge["Object"]()
+    __slots__ = "__lazy__", "__initialized__"
 
-    def __init__(self, value: JSValueRef = None, *, name: str = None,
+    def __init__(self, value: JSValueRef = None, *,
                  attach_to_global_as: str = None) -> None:
         global _runtime, _refs
         if _runtime is not None:
             if value is None:
                 value = create_object()
-            self._asdf = 1234
-            self._as_parameter_ = value
             self.__initialized__ = True
+            self._as_parameter_ = value
             add_ref(self)
             _refs.append(self)
             if attach_to_global_as is not None:
@@ -89,43 +115,45 @@ class Object(ValueSkeleton, SupportsLazyInit):
                     raise TypeError()
                 global_this[attach_to_global_as] = self
         else:
+            self.__initialized__ = False
             if hasattr(value, "_as_parameter_") or type(value) is JSValueRef:
                 self._as_parameter_ = value
             else:
                 self._as_parameter_ = None
             _refs.append(self)
-            self.__virtual__ = Object.__Virtual__(attach_to_global_as)
-            vi_object_queue.append(self)
+            self.__lazy__ = Object.__Lazy__(attach_to_global_as)
+            lazy_object_queue.append(self)
 
-    def set_property(self, name: Union[str, int], value: JSValueRef):
+    def set_property(self, name: Union[str, int], value: JSValueRef) -> Object:
         if self.__initialized__:
             set_property(self, name, value)
         else:
-            self.__virtual__[name] = value
+            self.__lazy__[name] = value
         return self
 
     def get_property(self, name: Union[str, int]) -> JSValueRef:
-        assert self.__initialized__, "Only initialized objects are supported"
+        if not self.__initialized__:
+            return self.__lazy__[name]
         return get_property(self, name)
 
     def __getitem__(self, name: Union[str, int]) -> JSValueRef:
         return self.get_property(name)
 
-    def __setitem__(self, name: Union[str, int], value: JSValueRef):
+    def __setitem__(self, name: Union[str, int], value: JSValueRef) -> Object:
         return self.set_property(name, value)
 
-    def __lazy_init__(self):
+    def __lazy_init__(self) -> None:
         if self._as_parameter_ is None:
             self._as_parameter_ = create_object()
         add_ref(self)
         self.__initialized__ = True
-        for key, descriptor in self.__virtual__:
-            self[key] = descriptor["value"]
-        atga = self.__virtual__._attach_to_global_as
+        for key, descriptor in self.__lazy__:
+            self[key] = descriptor.value
+        atga = self.__lazy__._attach_to_global_as
         if atga:
             global_this[atga] = self
 
-    def is_object(self):
+    def is_object(self) -> Literal[True]:
         return True
 
 
@@ -134,7 +162,7 @@ def jsfunc(fname=None, *, constructor=False,
            attach_to_as: Optional[str] = None,
            attach_to: Optional[JSValueRef] = None,
            wrap_returns: Optional[bool] = True):
-    def wrapper(function):
+    def wrapper(function: _T) -> _T:
         nonlocal attach_to, attach_to_as, attach_to_global_as
         name = fname if fname is not None else function.__name__
 
@@ -176,7 +204,7 @@ def jsfunc(fname=None, *, constructor=False,
                 def __lazy_init__(_):
                     function._as_parameter_ = create_function(dummy, name)
 
-            vi_function_queue.append(_())
+            lazy_function_queue.append(_())
         else:
             function._as_parameter_ = create_function(dummy, name)
         if attach_to_global_as:
@@ -203,7 +231,7 @@ def jsfunc(fname=None, *, constructor=False,
     return wrapper
 
 
-class Number(ValueSkeleton, _Number):
+class Number(BaseValue, _Number):
     __slots__ = "_as_parameter_", "value"
     _as_parameter_: JSValueRef
     value: float
@@ -225,7 +253,7 @@ class Number(ValueSkeleton, _Number):
     def as_integer_ratio(self) -> Tuple[int, int]:
         return self.value.as_integer_ratio()
 
-    def is_number(self):
+    def is_number(self) -> Literal[True]:
         return True
 
     def to_float(self) -> float:
@@ -352,10 +380,9 @@ class Number(ValueSkeleton, _Number):
         return round(self.value, ndigits)
 
 
-class String(ValueSkeleton, UserString):
-    data: str
-    _as_parameter_: JSValueRef
-    __slots__ = "data", "_as_parameter_"
+class String(BaseValue, UserString):
+    _as_parameter_: JSValueRef = Fridge["String"]()
+    __slots__ = "data",
 
     def __init__(self, seq) -> None:
         if type(seq) is POINTER(JSValueRef):
@@ -367,10 +394,12 @@ class String(ValueSkeleton, UserString):
 
 
 class Function(Object, Callable):
+    _as_parameter_: JSValueRef = Fridge["Function"]()
+
     def __init__(self, f: JSValueRef) -> None:
         super().__init__(f)
 
-    def is_function(self):
+    def is_function(self) -> Literal[True]:
         return True
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
@@ -378,11 +407,12 @@ class Function(Object, Callable):
 
 
 class Promise(Object, Awaitable):
-    __slots__ = *Object.__slots__, "__event"
+    __slots__ = "__event",
+    _as_parameter_: JSValueRef = Fridge["Promise"]()
     _event: Event
 
     @staticmethod
-    def _run_coro_like(F, *args, **kwargs):
+    def _run_coro_like(F, *args: Any, **kwargs: Dict[str, Any]):
         if iscoroutinefunction(F):
             loop = get_event_loop()
             r = loop.run_until_complete(F(*args, **kwargs))
@@ -391,24 +421,21 @@ class Promise(Object, Awaitable):
         return r
 
     @staticmethod
-    def _resolve(value):
-        print(Fridge["Promise"]["resolve"]())
-        print(Fridge["Promise"]())
-        print(value)
+    def _resolve(value: JSValueRef) -> JSValueRef:
         return call(Fridge["Promise"]["resolve"](), value,
                     this=Fridge["Promise"]())
 
     @staticmethod
-    def _reject(value):
+    def _reject(value: JSValueRef) -> JSValueRef:
         return call(Fridge["Promise"]["reject"](), value,
                     this=Fridge["Promise"]())
 
     @staticmethod
-    def resolve(value):
+    def resolve(value: JSValueRef) -> Promise:
         return Promise(Promise._resolve(value))
 
     @staticmethod
-    def reject(value):
+    def reject(value: JSValueRef) -> Promise:
         return Promise(Promise._reject(value))
 
     @staticmethod
@@ -439,7 +466,7 @@ class Promise(Object, Awaitable):
                 capture(p, i)
         return Promise(handler)
 
-    def all_async_gen(*args) -> AsyncGenerator[JSValueRef, None]:
+    def all_async_gen(*args: Promise) -> AsyncGenerator[JSValueRef, None]:
         """
         This is more naive implementation of Promise.all() JS built-in function
         TODO: better naming?
@@ -458,10 +485,10 @@ class Promise(Object, Awaitable):
             super().__init__(promise)
             Promise._run_coro_like(F, Function(resolve), Function(reject))
 
-    def is_promise(self):
+    def is_promise(self) -> Literal[True]:
         return True
 
-    async def __wait__(self):
+    async def __wait__(self) -> JSValueRef:
         if not hasattr(self, "_event") or self._event.is_set():
             event = self._event if hasattr(self, "_event") else Event()
             event.clear()
@@ -487,7 +514,7 @@ class Promise(Object, Awaitable):
             # changes _as_parameter_ value :(
             raise RuntimeError
 
-    def __await__(self):
+    def __await__(self) -> Generator[Any, None, JSValueRef]:
         return self.__wait__().__await__()
 
 
@@ -495,7 +522,7 @@ class Array(Object, MutableSequence):
     def __init__(self) -> None:
         pass
 
-    def is_array(self):
+    def is_array(self) -> None:
         return True
 
 
@@ -511,7 +538,7 @@ class NotConstructableError(Exception):
 
 
 class Reflect():
-    _as_parameter_ = Fridge["Reflect"]()
+    _as_parameter_: JSValueRef = Fridge["Reflect"]()
 
     def __init__(self) -> None:
         raise NotConstructableError
@@ -533,22 +560,21 @@ class Reflect():
         return is_constructor(value)
 
 
-class BigInt(ValueSkeleton):
+class BigInt(BaseValue):
     __slots__ = "__ints__", "_as_parameter_"
+    __ints__: List[int]
+    _as_parameter_: JSValueRef
 
     def __init__(self, *ints: int) -> None:
         # they are list of uint32_t
         self.__ints__ = list(ints)
 
-    def as_list(self):
+    def as_list(self) -> List[int]:
         return list(self.__ints__)
 
-    @staticmethod
-    def from_value():
-        pass
-
-    def __update_bigint__(self):
-        self._as_parameter_ = call()
+    def __update_bigint__(self) -> None:
+        ints = str_to_js_string(''.join(self.__ints__))
+        self._as_parameter_ = call(Fridge["BigInt"](), ints)
 
     def __iadd__(self, other_bigint: BigInt) -> BigInt:
         other_ints = other_bigint.__ints__
@@ -562,21 +588,21 @@ class BigInt(ValueSkeleton):
                 else:
                     self.__ints__.append(overhead >> 32)
 
-    def is_bigint(self):
+    def is_bigint(self) -> Literal[True]:
         return True
 
 
-class Undefined(ValueSkeleton):
-    _as_parameter_ = js_undefined
+class Undefined(BaseValue):
+    _as_parameter_: JSValueRef = js_undefined
 
-    def is_undefined(self):
+    def is_undefined(self) -> Literal[True]:
         return True
 
 
-class Null(ValueSkeleton):
-    _as_parameter_ = js_null
+class Null(BaseValue):
+    _as_parameter_: JSValueRef = js_null
 
-    def is_null(self):
+    def is_null(self) -> Literal[True]:
         return True
 
 
@@ -586,12 +612,8 @@ NumberLike = Union[Number, JSValueRef, int, float]
 _True = Literal[True]
 GlobalAttachments = Union[Tuple[Union[str, _True], ...], str, _True, None]
 _runtime: JSRef = None
-global_this = Object(js_globalThis, name="globalThis")
-Boolean._as_parameter_ = Fridge["Boolean"]()
-Function._as_parameter_ = Fridge["Function"]()
-Object._as_parameter_ = Fridge["Object"]()
+global_this = Object(js_globalThis)
 Number._as_parameter_ = Fridge["Number"]()
-Promise._as_parameter_ = Fridge["Promise"]()
 true = Boolean(js_true)
 false = Boolean(js_false)
 undefined = Undefined()
@@ -610,20 +632,25 @@ def _to_float(other: NumberLike) -> float:
 
 
 class JSRuntime:
-    __slots__ = "_as_parameter_", "__flags", "__runtime", \
-        "__context", "__module_runtime", "__promise_queue"
+    __slots__ = "_as_parameter_", "__flags", "__runtime", "__context", \
+        "__module_runtime"
+    __module_runtime: ModuleRuntime
+    __runtime: Optional[JSRef]
+    __context: Optional[JSRef]
+    _as_parameter_: Optional[JSRef]
+    flags: int
 
     def __init__(self, *, flags: int = 0x22):
         global _runtime
         if _runtime:
             raise LogicalError("A runtime is already created!")
         self.__flags = flags
-        self.__runtime = c_void_p()
-        self.__context = c_void_p()
-        self.__promise_queue = PromiseFIFOQueue()
-        self.__module_runtime = ModuleRuntime(self, self.__promise_queue)
+        self.__runtime = JSRef()
+        self.__context = JSRef()
+        self.__module_runtime = ModuleRuntime(self)
         self._as_parameter_ = None
-        vi_function_queue.append(Fridge)
+        promise_queue.clear()
+        lazy_function_queue.append(Fridge)
 
     def exec_module(self, specifier: str):
         module_runtime = self.__module_runtime
@@ -631,16 +658,14 @@ class JSRuntime:
                                             self.__get_base(),
                                             specifier)
         code = module_runtime.loader(default_loader, spec)
-        module = JavaScriptModule(self.__promise_queue,
-                                  module_runtime.queue,
-                                  spec, code, None, True)
+        module = JSModule(spec, code, None, True)
         module_runtime.add_module(str(spec), module)
         module.parse()
 
     def __get_base(self):
         return "file://" + getcwd() + "/"
 
-    def exec_script(self, specifier: str, async_: bool = True):
+    def exec_script(self, specifier: str, async_: bool = True) -> None:
         fileurl = default_path_resolver(None, self.__get_base(), specifier)
         script = default_loader(None, fileurl)
         if async_:
@@ -648,24 +673,11 @@ class JSRuntime:
         script = create_string_buffer(script.encode("UTF-16"))
         buffer = create_external_array_buffer(script)
         run_script(buffer, create_c_string(str(fileurl)))
-        self.__promise_queue.exec()
+        promise_queue.exec()
 
-    def get_true(_):
-        return Boolean(js_true)
-
-    def get_false(_):
-        return Boolean(js_false)
-
-    def get_null(_):
-        return Null()
-
-    def get_undefined(_):
-        return Undefined()
-
-    def __queue_promise(self, task):
-        # print("__queue_promise")
-        add_ref(c_void_p(task))
-        self.__promise_queue.append(c_void_p(task))
+    def __queue_promise(self, task: JSValueRef) -> None:
+        add_ref(task)
+        promise_queue.append(task)
 
     def memory_limit(self, limit: int = None) -> Optional[int]:
         if limit is None:
@@ -676,11 +688,11 @@ class JSRuntime:
     def memory_usage(self) -> int:
         return get_runtime_memory_usage(self)
 
-    def exit_and_reenter(self):
+    def exit_and_reenter(self) -> None:
         self.__exit__()
         return self.__enter__()
 
-    def __enter__(self):
+    def __enter__(self) -> JSRuntime:
         global _runtime
         self.__runtime = create_runtime(self.__flags)
         _runtime = self.__runtime
@@ -689,11 +701,11 @@ class JSRuntime:
         set_current_context(self.__context)
 
         @CFUNCTYPE(c_void_p, JSValueRef, c_void_p)
-        def promise_continuation_callback(task, user_data):
-            self.__queue_promise(task)
+        def promise_continuation_callback(task, _) -> None:
+            self.__queue_promise(JSValueRef(task))
 
         @CFUNCTYPE(c_void_p, JSValueRef, JSValueRef, c_bool, c_void_p)
-        def promise_rejections_callback(promise, reason, handled, _):
+        def promise_rejections_callback(promise, reason, handled, _) -> None:
             if not handled:
                 print("Unhandled promise rejection:",
                       js_value_to_string(c_void_p(reason)))
@@ -705,7 +717,7 @@ class JSRuntime:
 
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_: Any) -> None:
         global _runtime, _frefs
         try:
             for module in self.__module_runtime.modules.values():
