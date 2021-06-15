@@ -185,7 +185,8 @@ def jsfunc(fname=None, *, constructor=False,
                     args = c_array_to_iterator(args, arg_count, 1)
                     if is_coro_func:
                         promise, resolve, reject = create_promise()
-                        kwargs = {"resolve": Function(resolve), "reject": Function(reject)}
+                        kwargs = {"resolve": Function(resolve),
+                                  "reject": Function(reject)}
                     else:
                         kwargs = _empty_dict
                     r = function(*args, this=this, callee=callee,
