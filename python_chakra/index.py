@@ -44,10 +44,13 @@ class Object(BaseValue, SupportsLazyInit):
         __slots__ = "value", "get", "set", "writable", "enumerable", \
             "configurable"
 
-        def __init__(self, value: JSValueRef, get: JSValueRef = None,
-                     set: JSValueRef = None, writable: bool = True,
-                     enumerable: bool = True,
-                     configurable: bool = True) -> None:
+        def __init__(self,
+                     value: Optional[JSValueRef],
+                     get: Optional[JSValueRef],
+                     set: Optional[JSValueRef],
+                     writable: bool,
+                     enumerable: bool,
+                     configurable: bool) -> None:
             self.value = value
             self.get = get
             self.set = set
