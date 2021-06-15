@@ -83,7 +83,7 @@ class Object(BaseValue, SupportsLazyInit):
                 if self.__properties[name].writable:
                     self.__properties[name].value = value
                 else:
-                    raise
+                    raise TypeError
             else:
                 self.define_property(name, value, None, None, True, True, True)
 
