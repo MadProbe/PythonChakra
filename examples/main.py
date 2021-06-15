@@ -50,11 +50,8 @@ def isConstructor(value=undefined, *_, **_2):
 
 
 @jsfunc(attach_to_global_as=True)
-def sleep(value=0, *_, **_2):
-    async def f(resolve: Function, _: Function):
-        await asyncio.sleep(float(Number(value)))
-        resolve()
-    return Promise(f)
+async def sleep(value=0, *_, **_2):
+    await asyncio.sleep(float(Number(value)))
 
 
 with JSRuntime() as runtime:

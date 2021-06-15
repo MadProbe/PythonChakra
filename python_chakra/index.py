@@ -168,6 +168,7 @@ def jsfunc(fname=None, *, constructor=False,
     def wrapper(function: _T) -> _T:
         nonlocal attach_to, attach_to_as, attach_to_global_as
         name = fname if fname is not None else function.__name__
+        is_coro_func = iscoroutinefunction(function)
 
         @CFUNCTYPE(c_void_p, JSValueRef, c_bool,
                    POINTER(POINTER(JSValueRef)),
@@ -182,8 +183,16 @@ def jsfunc(fname=None, *, constructor=False,
                     else:
                         this = args[0]
                     args = c_array_to_iterator(args, arg_count, 1)
+                    if is_coro_func:
+                        promise, resolve, reject = create_promise()
+                        kwargs = {"resolve": Function(resolve), "reject": Function(reject)}
+                    else:
+                        kwargs = _empty_dict
                     r = function(*args, this=this, callee=callee,
-                                 new_call=bool(new_call))
+                                 new_call=bool(new_call), **kwargs)
+                    if is_coro_func:
+                        loop = get_event_loop()
+                        r = loop.run_until_complete(r)
                     if wrap_returns:
                         if r is True:
                             r = js_true
@@ -193,14 +202,24 @@ def jsfunc(fname=None, *, constructor=False,
                             r = str_to_js_string(r)
                         if type(r) in (int, float):
                             r = to_double(r)
+                        if r is None:
+                            r = js_undefined
                     r = walk_asparam_chain(r)
+                    if is_coro_func:
+                        call(resolve, r.value)
+                        return promise.value
                     if type(r) is JSValueRef:
                         r = r.value
                     return r
                 except Exception as ex:
                     message = format_exception(type(ex), ex,
                                                ex.__traceback__)
-                    throw(create_error('\n'.join(message)))
+                    error = create_error('\n'.join(message))
+                    if is_coro_func:
+                        call(reject, error)
+                        return promise.value
+                    else:
+                        throw(error)
 
         _frefs.append(dummy)
         if _runtime is None:
@@ -612,6 +631,7 @@ class Null(BaseValue):
 
 _refs = []
 _frefs = []
+_empty_dict = dict()
 NumberLike = Union[Number, JSValueRef, int, float]
 _True = Literal[True]
 GlobalAttachments = Union[Tuple[Union[str, _True], ...], str, _True, None]
