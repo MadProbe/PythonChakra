@@ -6,7 +6,7 @@ from asyncio.events import get_event_loop
 from collections import UserString
 from collections.abc import MutableSequence
 from inspect import Parameter, iscoroutinefunction, isfunction, signature
-from math import ceil, floor, inf, trunc
+from math import ceil, floor, trunc
 from numbers import Number as _Number
 from os import getcwd
 from sys import maxsize, version_info
@@ -266,7 +266,7 @@ def jsfunc(fname: str = None, *, constructor: bool = False,
                 if name is None:
                     raise TypeError
                 attach_to_global_as = name
-            if type(attach_to_global_as) is tuple:
+            if type(attach_to_global_as) in (tuple, list, set):
                 for prop in attach_to_global_as:
                     if prop is True:
                         if name is None:
@@ -280,7 +280,12 @@ def jsfunc(fname: str = None, *, constructor: bool = False,
                 if name is None:
                     raise TypeError
                 attach_to_as = name
-            Object(attach_to)[attach_to_as] = function
+            if type(attach_to) in (tuple, list, set):
+                for object in attach_to:
+                    object = Object(object)
+                    object[attach_to_as] = function
+            else:
+                Object(attach_to)[attach_to_as] = function
         return function
     return wrapper
 
@@ -664,8 +669,9 @@ _refs = []
 _frefs = []
 _empty_dict = dict()
 NumberLike = Union[Number, JSValueRef, int, float]
-_True = Literal[True]
-GlobalAttachments = Union[Tuple[Union[str, _True], ...], str, _True, None]
+AttachName = Union[str, Literal[True]]
+GlobalAttachments = Union[Tuple[AttachName, ...], List[AttachName],
+                          Set[AttachName], AttachName, None]
 _runtime: JSRef = None
 global_this = Object(js_globalThis)
 Number._as_parameter_ = Fridge["Number"]()
