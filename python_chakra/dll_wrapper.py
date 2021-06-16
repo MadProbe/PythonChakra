@@ -4,7 +4,7 @@ import re
 from abc import abstractmethod
 from ctypes import *
 from enum import IntEnum
-from typing import Any, Dict, Iterable, List, Literal, Optional, Protocol, \
+from typing import Any, Dict, Generator, Iterable, List, Literal, Optional, Protocol, \
     Tuple, Union, runtime_checkable
 
 from .utils import FIFOQueue, chakra_core
@@ -602,7 +602,8 @@ def parse_module_source(record: JSModuleRecord,
     return ex
 
 
-def init_module_record(ref_module, url: POINTER(c_byte)) -> JSModuleRecord:
+def init_module_record(ref_module: JSModuleRecord,
+                       url: POINTER(c_byte)) -> JSModuleRecord:
     record = JSValueRef()
     c = chakra_core.JsInitializeModuleRecord(ref_module,
                                              url,
@@ -683,7 +684,8 @@ def create_c_string(string: str):
     return result
 
 
-def c_array_to_iterator(array, length, offset=0):
+def c_array_to_iterator(array, length, offset=0) -> \
+        Generator[Any, None, JSValueRef]:
     for index in range(offset, length):
         yield array[index]
 

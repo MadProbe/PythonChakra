@@ -13,44 +13,44 @@ console = Object(attach_to_global_as="console")
 
 
 @jsfunc(attach_to_global_as=("print", "writeln"), attach_to=console)
-def log(*args, **_):
+def log(*args):
     print(*map(js_value_to_string, args))
 
 
 @jsfunc(attach_to=console)
-def warn(*args, **_):
+def warn(*args):
     args = map(js_value_to_string, args)
     print(chalk.yellow("[WARN]"), *args)
 
 
 @jsfunc(attach_to=console)
-def error(*args, **_):
+def error(*args):
     args = map(js_value_to_string, args)
     print(chalk.red("[ERROR]"), *args, file=sys.stderr)
 
 
 @jsfunc(attach_to_global_as=True)
-def write(*args, **_):
+def write(*args):
     print(*map(js_value_to_string, args), end=None)
 
 
 @jsfunc(attach_to_global_as=True)
-def count(a=None, b=None, *_, **_2):
+def count(a, b):
     return Number(a) + Number(b)
 
 
-@jsfunc(attach_to=Reflect)
-def isCallable(value=undefined, *_, **_2):
+@jsfunc(attach_to=Reflect, fill_value=undefined)
+def isCallable(value):
     return Reflect.is_callable(value)
 
 
-@jsfunc(attach_to=Reflect)
-def isConstructor(value=undefined, *_, **_2):
+@jsfunc(attach_to=Reflect, fill_value=undefined)
+def isConstructor(value):
     return Reflect.is_constructor(value)
 
 
 @jsfunc(attach_to_global_as=True)
-async def sleep(value=0, *_, **_2):
+async def sleep(value=0):
     await asyncio.sleep(float(Number(value)))
 
 

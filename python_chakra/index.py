@@ -1,14 +1,15 @@
 from __future__ import annotations
+from ast import Param
 
 from asyncio import Event
 from asyncio.events import get_event_loop
 from collections import UserString
 from collections.abc import MutableSequence
-from inspect import iscoroutinefunction
-from math import ceil, floor, trunc
+from inspect import Parameter, iscoroutinefunction, isfunction, signature
+from math import ceil, floor, inf, trunc
 from numbers import Number as _Number
 from os import getcwd
-from sys import maxsize
+from sys import maxsize, version_info
 from traceback import format_exception
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, Generator, \
     Optional, Tuple, TypeVar, Union, overload
@@ -160,15 +161,35 @@ class Object(BaseValue, SupportsLazyInit):
         return True
 
 
-def jsfunc(fname=None, *, constructor=False,
+def jsfunc(fname: str = None, *, constructor: bool = False,
+           fill_value: Any = None,
            attach_to_global_as: GlobalAttachments = None,
            attach_to_as: Optional[str] = None,
            attach_to: Optional[JSValueRef] = None,
            wrap_returns: Optional[bool] = True):
     def wrapper(function: _T) -> _T:
         nonlocal attach_to, attach_to_as, attach_to_global_as
+        assert isfunction(function)
         name = fname if fname is not None else function.__name__
         is_coro_func = iscoroutinefunction(function)
+        params = signature(function).parameters
+        max_args_limit = 0
+        min_args_limit = 0
+        kws = set()
+        all_kws = False
+        for param in params.values():
+            if param.kind == Parameter.KEYWORD_ONLY:
+                kws.add(param.name)
+            if version_info >= (3, 9) and \
+                param.kind == Parameter.POSITIONAL_ONLY or \
+                    param.kind == Parameter.POSITIONAL_OR_KEYWORD:
+                if param.default is not None:
+                    min_args_limit += 1
+                max_args_limit += 1
+            if param.kind == Parameter.VAR_POSITIONAL:
+                max_args_limit = 0x66666
+            if param.kind == Parameter.VAR_KEYWORD:
+                all_kws = True
 
         @CFUNCTYPE(c_void_p, JSValueRef, c_bool,
                    POINTER(POINTER(JSValueRef)),
@@ -178,19 +199,28 @@ def jsfunc(fname=None, *, constructor=False,
                 throw(create_type_error(f"{name} is not a constructor"))
             else:
                 try:
+                    kwargs = {}
                     if arg_count == 0:
                         this = None
                     else:
                         this = args[0]
-                    args = c_array_to_iterator(args, arg_count, 1)
+                    if all_kws or "this" in kws:
+                        kwargs["this"] = this
+                    if all_kws or "new_call" in kws:
+                        kwargs["new_call"] = bool(new_call)
+                    if all_kws or "callee" in kws:
+                        kwargs["callee"] = callee
+                    args: list = list(c_array_to_iterator(args, arg_count, 1))
+                    args.extend([fill_value] * (len(args) - min_args_limit))
                     if is_coro_func:
                         promise, resolve, reject = create_promise()
-                        kwargs = {"resolve": Function(resolve),
-                                  "reject": Function(reject)}
+                        if all_kws or "resolve" in kws:
+                            kwargs["resolve"] = Function(resolve)
+                        if all_kws or "reject" in kws:
+                            kwargs["reject"] = Function(reject)
                     else:
                         kwargs = _empty_dict
-                    r = function(*args, this=this, callee=callee,
-                                 new_call=bool(new_call), **kwargs)
+                    r = function(*(args[:max_args_limit]), **kwargs)
                     if is_coro_func:
                         loop = get_event_loop()
                         r = loop.run_until_complete(r)
