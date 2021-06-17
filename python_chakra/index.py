@@ -1,5 +1,4 @@
 from __future__ import annotations
-from ast import Param
 
 from asyncio import Event
 from asyncio.events import get_event_loop
@@ -12,7 +11,7 @@ from os import getcwd
 from sys import maxsize, version_info
 from traceback import format_exception
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, Generator, \
-    Optional, Tuple, TypeVar, Union, overload
+    Optional, Set, Tuple, TypeVar, Union, overload
 
 from .dll_wrapper import *
 from .modules import JSModule, ModuleRuntime, default_loader, \
@@ -167,6 +166,33 @@ def jsfunc(fname: str = None, *, constructor: bool = False,
            attach_to_as: Optional[str] = None,
            attach_to: Optional[JSValueRef] = None,
            wrap_returns: Optional[bool] = True):
+    """
+    This decorator is used to decorate functions
+    so they actually could be used by JS code.\n
+    NOTE: This decorator returns original function\n
+    PARAMETERS:\n
+    `fname`: `str` - name of the future JS function
+    (default: `function.__name__`)\n
+    KEYWORD-ONLY PARAMETERS:\n
+    `constructor`: `bool` - used to point if function is a constructor
+    this includes checking for new.target being non-undefined value
+    (default: `False`)\n
+    `fill_value`: `Any` - this value is used as a placeholder
+    if function accepts a necessary argument for python function,
+    but it hasn't been passed from JS side (default: `None`)
+    `attach_to_global_as`: `GlobalAttachments` - a string, which be used
+    as a name for function when it will be attached to global this.\n
+    value `True` also can be passed, indicating that name of function
+    must be used instead.\n
+    Tuple value also can passed, containing string values and / or `True` value
+    which will be iterated and applied sequentially (also lists and sets)
+    `attach_to`: `Optional[JSValueRef]` -
+    object, to which function will be attached\n
+    `attach_to_as`: `Optional[str]` - name used when attaching the function to
+    object from `attach_to` argument (default: `fname`)\n
+    `wrap_returns`: `Optional[bool]` - indicates if function's return value
+    must be wrapped into valid JS value (default: `True`)
+    """
     def wrapper(function: _T) -> _T:
         nonlocal attach_to, attach_to_as, attach_to_global_as
         assert isfunction(function)

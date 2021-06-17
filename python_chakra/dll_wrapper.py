@@ -4,8 +4,8 @@ import re
 from abc import abstractmethod
 from ctypes import *
 from enum import IntEnum
-from typing import Any, Dict, Generator, Iterable, List, Literal, Optional, Protocol, \
-    Tuple, Union, runtime_checkable
+from typing import Any, Dict, Generator, Iterable, List, Literal, Optional, \
+    Protocol, Tuple, Union, runtime_checkable
 
 from .utils import FIFOQueue, chakra_core
 
