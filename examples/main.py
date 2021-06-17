@@ -1,40 +1,58 @@
+import asyncio
 import sys
-from simple_chalk import chalk
+
 from python_chakra import *
+from simple_chalk import chalk
 
-with JSRuntime() as (runtime, global_this):
-    true = runtime.get_true()
-    global_this["__from_wrapper__"] = true
-    console = Object(attach_to_global_as="console")
-    console["WIP"] = true
 
-    @javascript_method()
-    def log(*args, **_):
-        print(*map(js_value_to_string, args))
+print("Start")
 
-    @javascript_method()
-    def warn(*args, **_):
-        args = map(js_value_to_string, args)
-        print(chalk.yellow("[WARN]"), *args)
 
-    @javascript_method()
-    def error(*args, **_):
-        args = map(js_value_to_string, args)
-        print(chalk.red("[ERROR]"), *args, file=sys.stderr)
+global_this["__from_wrapper__"] = true
+console = Object(attach_to_global_as="console")
 
-    @javascript_method()
-    def write_(*args, **_):
-        print(*map(js_value_to_string, args), end=None)
 
-    @javascript_method()
-    def count(a: JSValueRef = None, b: JSValueRef = None, **_):
-        return Number(a) + Number(b)
-    global_this["writeln"] = create_function(log, "log",
-                                             attach_to_global_as="print",
-                                             attach_to=console)
-    create_function(warn, "warn", attach_to=console)
-    create_function(error, "error", attach_to=console)
-    create_function(write_, "write", attach_to_global_as=True)
-    create_function(count, "count", attach_to_global_as=True)
+@jsfunc(attach_to_global_as=("print", "writeln"), attach_to=console)
+def log(*args):
+    print(*map(js_value_to_string, args))
 
-    runtime.exec_module("./examples/test.js")
+
+@jsfunc(attach_to=console)
+def warn(*args):
+    args = map(js_value_to_string, args)
+    print(chalk.yellow("[WARN]"), *args)
+
+
+@jsfunc(attach_to=console)
+def error(*args):
+    args = map(js_value_to_string, args)
+    print(chalk.red("[ERROR]"), *args, file=sys.stderr)
+
+
+@jsfunc(attach_to_global_as=True)
+def write(*args):
+    print(*map(js_value_to_string, args), end=None)
+
+
+@jsfunc(attach_to_global_as=True)
+def count(a, b):
+    return Number(a) + Number(b)
+
+
+@jsfunc(attach_to=Reflect, fill_value=undefined)
+def isCallable(value):
+    return Reflect.is_callable(value)
+
+
+@jsfunc(attach_to=Reflect, fill_value=undefined)
+def isConstructor(value):
+    return Reflect.is_constructor(value)
+
+
+@jsfunc(attach_to_global_as=True)
+async def sleep(value=0):
+    await asyncio.sleep(float(Number(value)))
+
+
+with JSRuntime() as runtime:
+    runtime.exec_module("./examples/tests/__all__.js")

@@ -1,8 +1,16 @@
 from abc import abstractmethod
+from typing import Generic, List, TypeVar
 
 
-class FIFOQueue:
+_T = TypeVar("_T")
+
+
+class FIFOQueue(Generic[_T]):
     __slots__ = '_tasks', '_remaining', 'executed', 'executing'
+    _tasks: List[_T]
+    _remaining: List[_T]
+    executed: bool
+    executing: bool
 
     def __init__(self):
         self._tasks = []
@@ -23,7 +31,7 @@ class FIFOQueue:
             self.exec()
         self.executed = True
 
-    def append(self, task):
+    def append(self, task: _T):
         # print(repr(self.__class__), "append", task)
         if self.executing:
             self._remaining.append(task)
@@ -32,7 +40,10 @@ class FIFOQueue:
         else:
             self._tasks.append(task)
 
+    def clear(self):
+        self._tasks.clear()
+
     @abstractmethod
-    def run():
+    def run(self, value: _T):
         """ Should be defined in subclasses """
         pass
