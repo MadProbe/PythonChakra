@@ -35,7 +35,7 @@ def write(*args):
 
 
 @jsfunc(attach_to_global_as=True)
-def count(a, b):
+def sum(a, b):
     return Number(a) + Number(b)
 
 

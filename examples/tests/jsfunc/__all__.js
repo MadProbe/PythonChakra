@@ -1,2 +1,2 @@
-import "./count.js";
+import "./sum.js";
 import "./sleep.js";
