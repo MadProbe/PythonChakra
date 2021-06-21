@@ -14,7 +14,7 @@ Tests.run(name, {
         assert(Reflect.isCallable(async function* () { }), "async function* () { }");
     },
     [`${ name } called on non-functions`]() {
-        assertNot(Reflect.isCallable(class { }), "class { }"); // Fails for now, @see chakra-core/ChakraCore#6720.
+        assertNot(Reflect.isCallable(class { }), "class { }");
         assertNot(Reflect.isCallable(0), "0");
         assertNot(Reflect.isCallable({}), "{}");
         assertNot(Reflect.isCallable(true), "true");
