@@ -220,13 +220,13 @@ def jsfunc(fname: str = None, *, constructor: bool = False,
         @CFUNCTYPE(c_void_p, JSValueRef, c_bool,
                    POINTER(POINTER(JSValueRef)),
                    c_ushort, c_void_p)
-        def dummy(callee, new_call, args, arg_count, _):
+        def dummy(callee, new_call, args, argc, _):
             if new_call and not constructor:
                 throw(create_type_error(f"{name} is not a constructor"))
             else:
                 try:
                     kwargs = {}
-                    if arg_count == 0:
+                    if argc == 0:
                         this = None
                     else:
                         this = args[0]
@@ -236,8 +236,8 @@ def jsfunc(fname: str = None, *, constructor: bool = False,
                         kwargs["new_call"] = bool(new_call)
                     if all_kws or "callee" in kws:
                         kwargs["callee"] = callee
-                    args: list = list(c_array_to_iterator(args, arg_count, 1))
-                    args.extend([fill_value] * (len(args) - min_args_limit))
+                    args: list = list(c_array_to_iterator(args, argc, 1))
+                    args.extend([fill_value] * (min_args_limit - len(args)))
                     if is_coro_func:
                         promise, resolve, reject = create_promise()
                         if all_kws or "resolve" in kws:
@@ -815,7 +815,7 @@ class JSRuntime:
         try:
             for ref in _refs:
                 walked: Optional[JSValueRef] = walk_asparam_chain(ref)
-                if walked is not None and walked.value is not None:
+                if walked and walked.value:
                     js_release(ref)
         except Exception as e:
             print("Failed to dispose object references, error:", e)
