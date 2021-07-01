@@ -14,6 +14,7 @@ Tests.run(name, {
         assert(Reflect.isCallable(async function* () { }), "async function* () { }");
     },
     [`${ name } called on non-functions`]() {
+        assertNot(Reflect.isCallable(Math), "Math");
         assertNot(Reflect.isCallable(class { }), "class { }");
         assertNot(Reflect.isCallable(0), "0");
         assertNot(Reflect.isCallable({}), "{}");
