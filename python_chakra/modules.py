@@ -130,10 +130,9 @@ class _ModuleEmitter:
             for k in keys:
                 code += f"export const {k} = {name}.{k};\n"
             code += f"export default {name};\n"
-            print(code)
             return code
         else:
-            return rf"export default {emitted};\n"
+            return f"export default {emitted};\n"
 
     @classmethod
     def _emit(cls, value: _Emittable) -> str:
@@ -189,7 +188,7 @@ def dafault_transformer(code: str, url: URL):
     elif extension == ".toml":
         return _ModuleEmitter.emit(loads(code))
     elif extension == ".csv":
-        return _ModuleEmitter.emit(list(flatten(reader(f.readlines()))))
+        return _ModuleEmitter.emit(list(flatten(reader(code.splitlines()))))
     else:
         return code
 
