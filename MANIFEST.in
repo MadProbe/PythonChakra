@@ -1,1 +1,2 @@
 include python_chakra/utils/libs/ChakraCore.dll
+include python_chakra/js-keywords-list.csv

@@ -1,0 +1,9 @@
+title = "Example"
+
+[server]
+port = 8000
+dev-password = "p@ssw0r6"
+paths = [
+    ["/src/html/*", "/html/*"],
+    ["/src/css/*", "/css/*"],
+]

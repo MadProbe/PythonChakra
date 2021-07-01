@@ -1,2 +1,4 @@
-requests==2.25.1
-whatwg-url==2018.8.26
+requests>=2.25.1
+whatwg-url>=2018.8.26
+PyYAML>=5.4.1
+regex>=2021.4.4

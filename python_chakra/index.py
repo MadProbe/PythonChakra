@@ -22,6 +22,27 @@ from .utils import BaseValue
 _T = TypeVar("_T")
 
 
+class _PropDesc:
+    value: Optional[JSValueRef]
+    get: Optional[JSValueRef]
+    set: Optional[JSValueRef]
+    writable: bool
+    enumerable: bool
+    configurable: bool
+    __slots__ = "value", "get", "set", "writable", "enumerable", \
+        "configurable"
+
+    def __init__(self, value: Optional[JSValueRef],
+                 get: Optional[JSValueRef], set: Optional[JSValueRef],
+                 writable: bool, enumerable: bool, configurable: bool) -> None:
+        self.value = value
+        self.get = get
+        self.set = set
+        self.writable = writable
+        self.configurable = configurable
+        self.enumerable = enumerable
+
+
 class Boolean(BaseValue):
     _as_parameter_ = Fridge["Boolean"]()
     __slots__ = ()
@@ -34,32 +55,8 @@ class Boolean(BaseValue):
 
 
 class Object(BaseValue, SupportsLazyInit):
-    class __PropDesc__:
-        value: Optional[JSValueRef]
-        get: Optional[JSValueRef]
-        set: Optional[JSValueRef]
-        writable: bool
-        enumerable: bool
-        configurable: bool
-        __slots__ = "value", "get", "set", "writable", "enumerable", \
-            "configurable"
-
-        def __init__(self,
-                     value: Optional[JSValueRef],
-                     get: Optional[JSValueRef],
-                     set: Optional[JSValueRef],
-                     writable: bool,
-                     enumerable: bool,
-                     configurable: bool) -> None:
-            self.value = value
-            self.get = get
-            self.set = set
-            self.writable = writable
-            self.configurable = configurable
-            self.enumerable = enumerable
-
     class __Lazy__:
-        __properties: Dict[Union[str, int], Object.__PropDesc__]
+        __properties: Dict[Union[str, int], _PropDesc]
         _attach_to_global_as: str
         __slots__ = "__properties", "_attach_to_global_as"
 
@@ -71,9 +68,8 @@ class Object(BaseValue, SupportsLazyInit):
                             get: JSValueRef = None, set: JSValueRef = None,
                             writable: bool = True, enumerable: bool = True,
                             configurable: bool = True) -> None:
-            desc = Object.__PropDesc__(value, get, set, writable,
-                                       enumerable, configurable)
-            self.__properties[name] = desc
+            self.__properties[name] = _PropDesc(value, get, set, writable,
+                                                enumerable, configurable)
 
         def delete_property(self, name) -> None:
             del self.__properties[name]
@@ -94,7 +90,7 @@ class Object(BaseValue, SupportsLazyInit):
             self.delete_property(name)
 
         def __iter__(self) -> Generator[Tuple[Union[str, int],
-                                        Object.__PropDesc__], None, None]:
+                                        _PropDesc], None, None]:
             return zip(self.__properties.keys(),
                        self.__properties.values())
 
@@ -103,8 +99,8 @@ class Object(BaseValue, SupportsLazyInit):
     _as_parameter_: JSValueRef = Fridge["Object"]()
     __slots__ = "__lazy__", "__initialized__"
 
-    def __init__(self, value: JSValueRef = None, *,
-                 attach_to_global_as: str = None) -> None:
+    def __init__(self, value: Optional[JSValueRef] = None, *,
+                 attach_to_global_as: Optional[str] = None) -> None:
         global _runtime, _refs
         if _runtime is not None:
             if value is None:
@@ -497,7 +493,7 @@ class Promise(Object, Awaitable):
     _event: Event
 
     @staticmethod
-    def _run_coro_like(F, *args: Any, **kwargs: Dict[str, Any]):
+    def _run_coro_like(F, *args: Any, **kwargs: Dict[str, Any]) -> Any:
         if iscoroutinefunction(F):
             loop = get_event_loop()
             r = loop.run_until_complete(F(*args, **kwargs))
@@ -727,7 +723,7 @@ class JSRuntime:
     _as_parameter_: Optional[JSRef]
     flags: int
 
-    def __init__(self, *, flags: int = 0x22):
+    def __init__(self, *, flags: int = 0x22) -> None:
         global _runtime
         if _runtime:
             raise LogicalError("A runtime is already created!")
@@ -739,13 +735,11 @@ class JSRuntime:
         promise_queue.clear()
         lazy_function_queue.append(Fridge)
 
-    def exec_module(self, specifier: str):
+    def exec_module(self, specifier: str) -> None:
         module_runtime = self.__module_runtime
-        spec = module_runtime.path_resolver(default_path_resolver,
-                                            self.__get_base(),
-                                            specifier)
-        code = module_runtime.loader(default_loader, spec)
-        module = JSModule(spec, code, None, True)
+        spec = module_runtime.path_resolver(self.__get_base(), specifier)
+        code = module_runtime.loader(spec)
+        module = JSModule(spec, code)
         module_runtime.add_module(str(spec), module)
         module.parse()
 
@@ -753,8 +747,8 @@ class JSRuntime:
         return "file://" + getcwd() + "/"
 
     def exec_script(self, specifier: str, async_: bool = True) -> None:
-        fileurl = default_path_resolver(None, self.__get_base(), specifier)
-        script = default_loader(None, fileurl)
+        fileurl = default_path_resolver(self.__get_base(), specifier)
+        script = default_loader(fileurl)
         if async_:
             script = f"(async()=>{{{script}}})()"
         script = create_string_buffer(script.encode("UTF-16"))
