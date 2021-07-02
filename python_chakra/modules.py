@@ -132,7 +132,6 @@ class _ModuleEmitter:
             for k in keys:
                 code += f"export const {k} = {name}.{k};\n"
             code += f"export default {name};\n"
-            print(code)
             return code
         else:
             return f"export default {emitted};\n"
