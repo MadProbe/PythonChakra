@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from csv import reader
 from ctypes import CFUNCTYPE, POINTER, c_int, c_void_p
+from xml.etree.ElementTree import Element
 from functools import partial
 from json.decoder import JSONDecoder
 from os import getcwd, name, urandom
@@ -11,6 +12,7 @@ from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, \
 
 import regex as re
 import requests
+from defusedxml.ElementTree import fromstring
 from toml import loads
 from whatwg_url import Url as URL, is_valid_url, parse_url
 from yaml import safe_load
@@ -126,10 +128,11 @@ class _ModuleEmitter:
                 # avoid situiations where random name
                 # is a property name of parsed file
                 name = _gen_random_name()
-            code = f"const {name} = {emitted};\n"
+            code = f"const {name} = {emitted};\n\n"
             for k in keys:
                 code += f"export const {k} = {name}.{k};\n"
             code += f"export default {name};\n"
+            print(code)
             return code
         else:
             return f"export default {emitted};\n"
@@ -189,6 +192,17 @@ def dafault_transformer(code: str, url: URL):
         return _ModuleEmitter.emit(loads(code))
     elif extension == ".csv":
         return _ModuleEmitter.emit(list(flatten(reader(code.splitlines()))))
+    elif extension == ".xml":
+        element: Element = fromstring(code)
+
+        def recursion(element: Element):
+            data = dict()
+            data["name"] = element.tag
+            data["attrs"] = element.attrib
+            data["children"] = list(map(recursion, element.findall("./*")))
+            return data
+
+        return _ModuleEmitter.emit(recursion(element))
     else:
         return code
 
