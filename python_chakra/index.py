@@ -589,9 +589,9 @@ class Promise(Object, Awaitable):
         await event.wait()
 
         state = get_promise_state(self)
-        if state == js_promise_states["resolved"]:
+        if state == JSPromiseStates.Resolved:
             return get_promise_result(self)
-        elif state == js_promise_states["rejected"]:
+        elif state == JSPromiseStates.Rejected:
             raise get_promise_result(self)
         else:
             # This happens when somebody somehow
@@ -629,11 +629,11 @@ class Reflect():
 
     @staticmethod
     def is_array(value: JSValueRef) -> bool:
-        return typeof(value) == js_types["array"]
+        return typeof(value) == JSType.array
 
     @staticmethod
     def is_boolean(value: JSValueRef) -> bool:
-        return typeof(value) == js_types["boolean"]
+        return typeof(value) == JSType.boolean
 
     @staticmethod
     def is_callable(value: JSValueRef) -> bool:

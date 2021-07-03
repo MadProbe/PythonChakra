@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from abc import abstractmethod
 from ctypes import *
-from enum import IntEnum
+from enum import IntEnum, unique
 from typing import Any, Dict, Generator, Iterable, List, Literal, Optional, \
     Protocol, Tuple, Union, runtime_checkable
 
@@ -129,8 +129,8 @@ class?")
 
         def _rec(obj: JSValueRef):
             def add(value):
-                if typeof(value) not in (js_types["object"],
-                                         js_types["function"]):
+                if typeof(value) not in (JSType.object,
+                                         JSType.function):
                     return
                 if value.value in d:
                     entry = d.get(value.value)
@@ -175,6 +175,30 @@ class PromiseFIFOQueue(FIFOQueue):
             js_release(task)
 
 
+@unique
+class JSType(IntEnum):
+    undefined = 0
+    null = 1
+    number = 2
+    string = 3
+    boolean = 4
+    object = 5
+    function = 6
+    error = 7
+    array = 8
+    symbol = 9
+    arraybuffer = 10
+    typedarray = 11
+    dataview = 12
+
+
+@unique
+class JSPromiseStates(IntEnum):
+    Pending = 0
+    Resolved = 1
+    Rejected = 2
+
+
 promise_queue = PromiseFIFOQueue()
 nullptr = POINTER(c_int)()
 StrictModeType = Union[bool, Literal[0, 1]]
@@ -187,26 +211,6 @@ c_func_type = chakra_core._FuncPtr
 c_true = 1
 c_false = 0
 context_count = 1
-js_types = {
-    "undefined": 0,
-    "null": 1,
-    "number": 2,
-    "string": 3,
-    "boolean": 4,
-    "object": 5,
-    "function": 6,
-    "error": 7,
-    "array": 8,
-    "symbol": 9,
-    "arraybuffer": 10,
-    "typedarray": 11,
-    "dataview": 12
-}
-js_promise_states = {
-    "pending": 0,
-    "resolved": 1,
-    "rejected": 2
-}
 __callback_refs = []
 
 
