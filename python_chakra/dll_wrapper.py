@@ -381,6 +381,13 @@ def get_own_property_names(value: JSValueRef) -> JSValueRef:
     return names
 
 
+def clone(value: JSValueRef) -> JSValueRef:
+    result = JSValueRef()
+    c = chakra_core.JsCloneObject(value, byref(result))
+    assert c == 0, descriptive_message(c, "clone")
+    return result
+
+
 def get_prototype(value: JSValueRef) -> JSValueRef:
     proto = JSValueRef()
     c = chakra_core.JsGetPrototype(value, byref(proto))

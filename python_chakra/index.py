@@ -123,17 +123,20 @@ class Object(BaseValue, SupportsLazyInit):
             self.__lazy__ = Object.__Lazy__(attach_to_global_as)
             lazy_object_queue.append(self)
 
+    def clone(self) -> Object:
+        return Object(clone(self))
+
+    def get_property(self, name: Union[str, int]) -> JSValueRef:
+        if not self.__initialized__:
+            return self.__lazy__[name]
+        return get_property(self, name)
+
     def set_property(self, name: Union[str, int], value: JSValueRef) -> Object:
         if self.__initialized__:
             set_property(self, name, value)
         else:
             self.__lazy__[name] = value
         return self
-
-    def get_property(self, name: Union[str, int]) -> JSValueRef:
-        if not self.__initialized__:
-            return self.__lazy__[name]
-        return get_property(self, name)
 
     def __getitem__(self, name: Union[str, int]) -> JSValueRef:
         return self.get_property(name)
@@ -639,6 +642,10 @@ class Reflect():
     @staticmethod
     def is_constructor(value: JSValueRef) -> bool:
         return is_constructor(value)
+
+    @staticmethod
+    def clone(value: JSValueRef) -> JSValueRef:
+        return clone(value)
 
 
 class BigInt(BaseValue):
